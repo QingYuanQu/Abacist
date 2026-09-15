@@ -1,0 +1,19 @@
+# Abacist Python 依赖
+# 安装：pip install -r requirements.txt
+
+# ---- torch 安装说明（建议单独装，避免默认装 CPU 版）----
+# RTX 2050 / CUDA 13.2，请按需选择其一：
+# 记得开代理
+# (base) PS C:\WINDOWS\system32> pip3 install torch torchvision -i https://download.pytorch.org/whl/cu132
+# ---- 核心训练 / 数值计算 ----
+numpy
+
+# ---- 图像与渲染 ----
+Pillow
+matplotlib
+imageio
+
+# ---- 工具 / 测试 ----
+scipy
+openpyxl
+pytest

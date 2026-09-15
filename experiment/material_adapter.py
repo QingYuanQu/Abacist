@@ -1,0 +1,405 @@
+# -*- coding: utf-8 -*-
+"""experiment/material_adapter.py —— 课程材料适配器（阶段 3+4）。
+
+职责：读 Trial.material 配置 → 调底层 parse（表达式生成）+ eval（abacus/digit，经 bridge）
+→ 投影成 model_lm 的 material.jsonl（{category, Q, A}）。
+
+这是 datagen/ 的「新内核替代」（阶段 4 起 datagen/ 已删除）：
+  - 树枚举 / 全括号中缀 / 前后序  → parse.dataset_generator（替代 datagen/parse/traverse）
+  - 求值（口诀 / 逐位）            → bridge.align（替代 datagen/eval/evaluate）
+  - A 行式投影                     → project_a（替代 datagen/parse/format.format_a）
+  - 珠态数据（数字↔珠态）          → abacus.bead_codec（原 datagen/gen_bead.py 迁入）
+
+以新的为准：运算符 × ÷、空盘起算口诀、digit 逐位（已清进0）。
+env（单步交互）类型已删除：未被任何 exp 使用，逐步交互语义由 VLA closed_loop 覆盖。
+"""
+from __future__ import annotations
+
+import hashlib
+import itertools
+import json
+import os
+import random
+
+from evaluate.abacus.bead_codec import num_to_bead_text
+from evaluate.bridge.align import align, make_default_composer
+from evaluate.bridge.ir import build_instance, ExpressionInstance
+from evaluate.digit import make_digit_fn
+from parse.dataset_generator import (
+    enumerate_trees, assign_leaves, assign_ops, replace_leaves,
+    infix_full, prefix, postfix, evaluate_num, LETTERS,
+)
+
+
+# ==================== 投影层：IR → Q / A 行式文本 ====================
+
+def _op_step_content(s, eval_, abacus_bead: bool = False) -> str:
+    """单个 calc 步的操作步内容：后缀切片 / 口诀 / 逐位。"""
+    if eval_ in ('none', None):
+        return f"{s.a},{s.b},{s.token}"
+    if eval_ == 'abacus':
+        oral = ';'.join(a.oral for a in s.abacus.actions)
+        if abacus_bead and s.abacus.actions:
+            init = num_to_bead_text(0)
+            final = num_to_bead_text(s.abacus.actions[-1].value)
+            return f"{init}~{oral}~{final}"
+        return oral
+    if eval_ == 'digit':
+        return s.digit or ''
+    return ''
+
+
+def _project_stack(inst: ExpressionInstance, eval_) -> str:
+    """STACK 行（prepost_stack）：栈快照 + 操作步交织，'|' 分隔。"""
+    parts = []
+    for s in inst.steps:
+        if s.kind == 'push':
+            parts.append(','.join(str(x) for x in s.stack))
+        else:  # calc
+            parts.append(_op_step_content(s, eval_))
+            parts.append(','.join(str(x) for x in s.stack))
+    return '|'.join(parts)
+
+
+def _project_eval_steps(inst: ExpressionInstance, eval_, abacus_bead: bool = False) -> str:
+    """ABACUS/DIGIT 行（none + eval）：独立操作步，'|' 分隔。"""
+    return '|'.join(_op_step_content(s, eval_, abacus_bead)
+                    for s in inst.steps if s.kind == 'calc')
+
+
+def project_q(inst: ExpressionInstance, input_fmt: str = 'infix') -> str:
+    """投影 Q（中缀/前缀/后缀 + '='）。"""
+    if input_fmt == 'prefix':
+        return inst.pre + '='
+    if input_fmt == 'postfix':
+        return inst.post + '='
+    return inst.Q + '='  # infix（默认）
+
+
+def project_a(inst: ExpressionInstance, parse: str, eval_: str,
+              input_fmt: str = 'infix', abacus_bead: bool = False) -> str:
+    """从 IR 投影 A（model_lm 的行式思考链）。
+
+    对照 datagen/parse/format.format_a 的投影规则，逐字节兼容。
+    """
+    ans_str = str(inst.ANS)
+    if parse == 'fixed':
+        n = inst.ANS
+        return f"0{n}" if 0 <= n < 10 else str(n)
+    if parse == 'direct':
+        return ans_str + '#'
+
+    reps = []
+    if input_fmt != 'infix':
+        reps.append(('INFIX', inst.Q))
+    if parse in ('pre', 'prepost', 'prepost_stack'):
+        if input_fmt != 'prefix':
+            reps.append(('PRE', inst.pre))
+    if parse in ('post', 'prepost', 'prepost_stack'):
+        if input_fmt != 'postfix':
+            reps.append(('POST', inst.post))
+    if parse == 'prepost_stack':
+        reps.append(('STACK', _project_stack(inst, eval_)))
+    elif eval_ in ('abacus', 'digit'):
+        label = 'ABACUS' if eval_ == 'abacus' else 'DIGIT'
+        content = _project_eval_steps(inst, eval_, abacus_bead)
+        if content:
+            reps.append((label, content))
+
+    think = '\n'.join(f'{label} {content}' for label, content in reps)
+    if eval_ in ('none', 'digit', 'abacus', None):
+        return f'{think}\nANS {ans_str}#'
+    if eval_ == 'no_ans':
+        return f'{think}#'
+    return think
+
+
+def project_structure_a(inst, parse: str) -> str:
+    """纯结构转换的 A 投影：目标记法序列 + '#'（无思考链标记、无 ANS 求值）。
+
+    用于 experiment 型 dataset 课程（前中后缀记法转换对比）——任务只学记法结构，
+    不学算术求值，故 A 就是目标记法序列本身：
+      parse='pre'  → 前序序列 '#'（如 "+ + + 6 1 3 9#"）
+      parse='post' → 后序序列 '#'（如 "6 1 3 9 + + +#"）
+
+    区别于 project_a：后者是 course 型 expr 用的富结构思考链（POST/PRE 标记 + ANS）。
+    """
+    seq = inst.pre if parse == 'pre' else inst.post
+    return f'{seq}#'
+
+
+# ==================== 生成层：material 配置 → 表达式 → IR → material.jsonl ====================
+
+def _iter_exprs(start, end, repeat, op_list, sample, rng):
+    """生成 (tree_idx, op_combo, operands) 流。sample>0 随机采样（去重），否则全枚举。"""
+    trees = list(enumerate_trees(repeat))
+    op_combos = list(itertools.product(op_list, repeat=repeat - 1))
+    n_trees = len(trees)
+    n_ops = len(op_combos)
+    n_operand_combos = (end - start) ** repeat
+    total = n_trees * n_ops * n_operand_combos
+
+    if sample is not None and sample > 0:
+        seen = set()
+        yielded = 0
+        attempts = 0
+        max_attempts = max(sample * 3, total)
+        while yielded < sample and attempts < max_attempts and len(seen) < total:
+            tree_idx = rng.randrange(n_trees)
+            op_combo = op_combos[rng.randrange(n_ops)]
+            operands = tuple(rng.randint(start, end - 1) for _ in range(repeat))
+            key = (tree_idx, op_combo, operands)
+            attempts += 1
+            if key in seen:
+                continue
+            seen.add(key)
+            yield tree_idx, op_combo, operands
+            yielded += 1
+    else:
+        for tree_idx in range(n_trees):
+            for op_combo in op_combos:
+                for operands in itertools.product(range(start, end), repeat=repeat):
+                    yield tree_idx, op_combo, operands
+
+
+def _generate_expr(m, seed) -> tuple[int, int]:
+    """生成 expr 类型课程数据（流式写 train/test 双文件）。"""
+    composer, abacus = make_default_composer()
+    digit_fn = make_digit_fn()
+
+    trees = list(enumerate_trees(m.repeat))
+    op_list = list(m.ops)
+    rng = random.Random(seed)
+
+    train_f = open(m.train_data_path, 'w', encoding='utf-8')
+    test_f = open(m.test_data_path, 'w', encoding='utf-8') if \
+        (m.test_data_path and m.test_data_path != m.train_data_path) else None
+
+    train_count = test_count = filtered = 0
+    try:
+        for tree_idx, op_combo, operands in _iter_exprs(
+                m.start, m.end, m.repeat, op_list, m.sample, rng):
+            # 1. 组装数值树
+            t = assign_ops(assign_leaves(trees[tree_idx]), list(op_combo))
+            values = {LETTERS[i]: v for i, v in enumerate(operands)}
+            nt = replace_leaves(t, values)
+
+            # 2. 求值（数学真值）+ 允许负结果过滤
+            ans = evaluate_num(nt)
+            if not m.allow_negative and ans < 0:
+                filtered += 1
+                continue
+
+            # 3. 组装 record + align（abacus/digit 注解）
+            record = {
+                'n': m.repeat, 'ops': ''.join(op_combo),
+                'Q': infix_full(nt), 'pre': prefix(nt), 'post': postfix(nt),
+                'ANS': ans,
+            }
+            try:
+                steps, _ = align(record['post'].split(), composer, abacus,
+                                 digit_fn=digit_fn, expected_ans=ans)
+            except Exception:
+                # abacus 中间态负数 / 档位越界（新内核无倒减法），整条过滤
+                filtered += 1
+                continue
+
+            # 4. 投影 Q/A
+            inst = build_instance(record, steps)
+            q = project_q(inst, m.input_fmt)
+            a = project_a(inst, m.parse, m.eval, m.input_fmt, m.abacus_bead)
+            line = json.dumps({"category": ''.join(op_combo), "Q": q, "A": a},
+                              ensure_ascii=False) + '\n'
+
+            # 5. 确定性分流（MD5，跨进程一致）
+            key = f"{operands},{op_combo},{tree_idx},{seed}"
+            h = int(hashlib.md5(key.encode()).hexdigest()[:8], 16)
+            if test_f is not None and (h / 0xFFFFFFFF) < m.split:
+                test_f.write(line)
+                test_count += 1
+            else:
+                train_f.write(line)
+                train_count += 1
+    finally:
+        train_f.close()
+        if test_f:
+            test_f.close()
+
+    print(f"[material_adapter] expr 生成完成：训练 {train_count} / 测试 {test_count} / 过滤 {filtered}")
+    return train_count, test_count
+
+
+def _sample_bead_numbers(bead_start, bead_end, samples_per_digit: int = 2, seed: int = 42):
+    """基于算盘珠态数学结构的精简采样（原 datagen/gen_bead.py 迁入）。
+
+    三层采样：位值核心（每位 0-9 至少一次）/ 组合多样性 / 边界覆盖 + 负数覆盖。
+    """
+    rng = random.Random(seed)
+    if bead_end <= bead_start:
+        return []
+
+    max_abs = max(abs(bead_start), abs(bead_end - 1))
+    n_digits = len(str(max_abs))
+    has_negative = bead_start < 0
+
+    result = set()
+
+    # Layer 1：位值核心 — 每个十进制位上 0-9 至少一次
+    for pos in range(n_digits):
+        power = 10 ** pos
+        for digit_val in range(10):
+            for _ in range(samples_per_digit):
+                fill = 0
+                if pos < n_digits - 1:
+                    max_fill = (bead_end - 1) // (power * 10)
+                    if max_fill > 0:
+                        fill = rng.randint(0, min(max_fill, 99)) * (power * 10)
+                n = fill + digit_val * power
+                if bead_start <= n < bead_end:
+                    result.add(n)
+
+    # Layer 2：组合多样性 — 相邻位随机组合
+    for _ in range(max(50, n_digits * 30)):
+        result.add(rng.randint(bead_start, bead_end - 1))
+
+    # Layer 3：边界覆盖
+    if bead_end - bead_start <= 100:
+        for n in range(bead_start, bead_end):
+            result.add(n)
+    if bead_start <= 0 < bead_end:
+        result.add(0)
+    for k in range(n_digits):
+        base = 10 ** k
+        for offset in [-1, 0, 1]:
+            n = base + offset
+            if bead_start <= n < bead_end:
+                result.add(n)
+    if bead_start < bead_end:
+        result.add(bead_start)
+        result.add(bead_end - 1)
+        for offset in range(-3, 0):
+            n = bead_end - 1 + offset
+            if bead_start <= n < bead_end:
+                result.add(n)
+
+    # 负数覆盖
+    if has_negative:
+        for k in range(n_digits):
+            base = 10 ** k
+            for offset in [-1, 0, 1]:
+                n = -(base + offset)
+                if bead_start <= n < bead_end:
+                    result.add(n)
+        for pos in range(n_digits):
+            power = 10 ** pos
+            for digit_val in range(1, 10):
+                n = -(digit_val * power + rng.randint(0, power - 1))
+                if bead_start <= n < bead_end:
+                    result.add(n)
+        for _ in range(30):
+            result.add(rng.randint(bead_start, -1))
+
+    return sorted(result)
+
+
+def _generate_bead(start, end, out_path, repeat, ops, allow_negative,
+                   max_samples, test_out_path, split, seed, base: int = 10) -> None:
+    """生成珠态训练数据（数字↔珠态，用新内核 abacus.bead_codec）。"""
+    os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)
+    if test_out_path:
+        os.makedirs(os.path.dirname(test_out_path) or '.', exist_ok=True)
+
+    bead_start, bead_end = start, end
+    n_digits = len(str(max(abs(bead_start), abs(bead_end - 1))))
+    print(f"[珠态数据] 操作数范围: [{start}, {end}), repeat={repeat}, ops='{ops}', 位数={n_digits}")
+
+    numbers = _sample_bead_numbers(bead_start, bead_end, seed=seed)
+    if max_samples is not None and len(numbers) > max_samples:
+        step = max(1, len(numbers) // max_samples)
+        numbers = numbers[::step][:max_samples]
+
+    def _lines(n):
+        bead = num_to_bead_text(n, base)
+        # 与 expr 课的 project_a 对齐：答案统一用 "ANS <ans>#" 包裹，
+        # 使 acc_mode=acc_ans 对所有课一致生效（认算盘无思考链，ANS 前为空）。
+        return (json.dumps({"category": "盘面", "Q": str(n), "A": f"ANS {bead}#"},
+                           ensure_ascii=False) + '\n',
+                json.dumps({"category": "珠态", "Q": bead, "A": f"ANS {n}#"},
+                           ensure_ascii=False) + '\n')
+
+    if test_out_path:
+        train_count = test_count = 0
+        with open(out_path, 'w', encoding='utf-8') as train_f, \
+             open(test_out_path, 'w', encoding='utf-8') as test_f:
+            for n in numbers:
+                pos_line, neg_line = _lines(n)
+                key = f"{n},{seed}"
+                h = int(hashlib.md5(key.encode()).hexdigest()[:8], 16)
+                if (h / 0xFFFFFFFF) < split:
+                    test_f.write(pos_line); test_f.write(neg_line); test_count += 2
+                else:
+                    train_f.write(pos_line); train_f.write(neg_line); train_count += 2
+        print(f"[珠态数据] 已生成 {train_count + test_count} 条 → train={out_path}, test={test_out_path}")
+    else:
+        count = 0
+        with open(out_path, 'w', encoding='utf-8') as f:
+            for n in numbers:
+                pos_line, neg_line = _lines(n)
+                f.write(pos_line); f.write(neg_line); count += 2
+        print(f"[珠态数据] 已生成 {count} 条 → {out_path}")
+
+
+def _generate_dataset(m) -> None:
+    """从 source 投影 dataset 类型课程数据（流式写 train/test，按 sp 字段分流）。
+
+    dataset 源（如 dataset_C.jsonl）是原始 IR（Q/pre/post/ANS/sp），不是可直接训练的
+    {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标记法
+    + '#'，纯结构转换、不求值）；steps 用空表即可（无需 align 注解）。
+    """
+    train_f = open(m.train_data_path, 'w', encoding='utf-8')
+    test_f = open(m.test_data_path, 'w', encoding='utf-8') if \
+        (m.test_data_path and m.test_data_path != m.train_data_path) else None
+
+    train_count = test_count = 0
+    try:
+        with open(m.source, 'r', encoding='utf-8') as src:
+            for line in src:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                inst = build_instance(record, [])
+                q = project_q(inst, m.input_fmt)
+                a = project_structure_a(inst, m.parse)
+                out_line = json.dumps(
+                    {"category": record.get('ops', ''), "Q": q, "A": a},
+                    ensure_ascii=False) + '\n'
+                if test_f is not None and record.get('sp') == 'test':
+                    test_f.write(out_line)
+                    test_count += 1
+                else:
+                    train_f.write(out_line)
+                    train_count += 1
+    finally:
+        train_f.close()
+        if test_f:
+            test_f.close()
+    print(f"[material_adapter] dataset 投影完成：训练 {train_count} / 测试 {test_count}")
+
+
+def generate_trial(cfg, seed) -> None:
+    """根据单课配置生成数据。cfg 为 Trial 对象。"""
+    m = cfg.material
+    print("=" * 60)
+    print(f"[数据生成] 第{cfg.id}课: {cfg.name} (type={m.type})")
+    print("=" * 60)
+
+    if m.type == 'expr':
+        _generate_expr(m, seed)
+    elif m.type == 'bead':
+        _generate_bead(m.start, m.end, m.train_data_path, m.repeat, m.ops,
+                       m.allow_negative, m.sample, m.test_data_path, m.split,
+                       seed, base=m.abacus_base)
+    elif m.type == 'dataset':
+        _generate_dataset(m)
+    else:
+        raise ValueError(f"未知 material.type: {m.type!r}（env 类型已删除）")
