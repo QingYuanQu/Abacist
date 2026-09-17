@@ -40,9 +40,7 @@ class GPT(nn.Module):
         self.blocks = nn.ModuleList()
         # 逐层构造：头数（进而 head_dim）随层变化，位置编码也随之逐层独立
         for l in range(num_layers):
-            n = num_layers // 2
-            current_num_heads = config.brain.heads_for_layer(l, n)
-            self.blocks.append(Block(l, config, current_num_heads))
+            self.blocks.append(Block(l, config, config.brain.heads_for_layer(l)))
 
         # 输入侧位置编码：绝对编码（learned / sinusoidal）加在 token embedding 上，
         # 全局只加一次；相对编码（rope / alibi）对此是 no-op。
@@ -62,8 +60,7 @@ class GPT(nn.Module):
         config = self.config
         brain = config.brain
         pos = config.pos_emb
-        n = brain.num_hidden_layers // 2
-        heads = [brain.heads_for_layer(l, n) for l in range(brain.num_hidden_layers)]
+        heads = [brain.heads_for_layer(l) for l in range(brain.num_hidden_layers)]
         total = sum(p.numel() for p in self.parameters())
         rope_len = pos.max_position_embeddings or config.max_seq_len
 
@@ -78,7 +75,6 @@ class GPT(nn.Module):
             f"{' (显式)' if pos.max_position_embeddings else ' (取自 max_seq_len)'}",
             f"  rope_theta           : {pos.theta}",
             f"  rope_scaling         : {pos.rope_scaling}",
-            f"  heads_pattern        : {brain.attention_heads_pattern}",
             f"  heads_per_layer      : {heads}",
             f"  head_dims            : {[brain.hidden_size // h for h in heads]}",
             "=" * 64,

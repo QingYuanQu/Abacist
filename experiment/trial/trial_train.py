@@ -35,12 +35,16 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
         Record | None: 最优 epoch 的 Record；无验证或未训练任何 epoch 时为 None
     """
     trial = exp.trials[trial_id]
-    # ---- 从 exp 读取全局配置
+    method = trial.method
+    paths = trial.paths
+
+    # ---- 从 exp 读取实验级配置 ----
     train_config = exp.train
-    brain_config = exp.brain.with_trial_overrides(trial.material)
+    brain_config = exp.brain.with_trial_overrides(trial.heads)
     eval_batch_size = exp.eval.eval_batch_size
     enable_val = train_config.enable_validation
     early_stop = train_config.early_stop_patience
+    pass_threshold = exp.eval.pass_threshold if exp.eval else 0.95
 
     # ---- 从 ctx 取运行时状态 ----
     vocab_data = ctx.vocab_data
@@ -50,20 +54,15 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
 
     device = ctx.device
     prev_model_path = ctx.prev_model_path
-    extra_train_files = ctx.review_files
-    epochs = ctx.epochs
     seed = ctx.seed
 
-    # ---- 从 trial 取课程配置 ----
-    train_data_path = trial.material.train_data_path
-
-    method = trial.method
+    # ---- 从 trial 取 trial 级配置 ----
+    epochs = method.epochs
     lr = method.learning_rate
-    pass_threshold = exp.eval.pass_threshold if exp.eval else 0.95
-
-    model_path = trial.artifacts.best_model_path
-    ckpt_path = trial.artifacts.checkpoint_path
-    train_log_path = trial.artifacts.train_log_path
+    train_data_path = paths.train_data
+    model_path = paths.best_model
+    ckpt_path = paths.checkpoint
+    train_log_path = paths.train_log
 
     set_seed(seed)
 
@@ -72,7 +71,6 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
         file_path=train_data_path,
         vocab_data=vocab_data,
         repeat_factor=method.repeat_factor,
-        extra_files=extra_train_files,
     )
     train_loader = DataLoader(train_dataset,
                               batch_size=method.batch_size,
@@ -109,7 +107,7 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
                 f"  权重文件 {prev_model_path} 的 vocab_size = {prev_vocab_size}\n"
                 f"  当前词表 vocab_size = {vocab_size}\n"
                 f"  原因：权重是用不同的词表训练的。\n"
-                f"  解决：运行 python -m exp --reset 重新从 L0 开始训练。"
+                f"  解决：运行 python -m experiment --experiment <name> --reset 重新从 L0 开始训练。"
             )
         model.load_state_dict(prev_state)
     # 3. 从头开始训练
@@ -135,7 +133,7 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
                  pad_id,
                  start_epoch,
                  ckpt_path,
-                 test_data_path=trial.material.test_data_path,
+                 test_data_path=paths.test_data,
                  vocab_data=vocab_data,
                  eval_batch_size=eval_batch_size,
                  enable_val=enable_val,

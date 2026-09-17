@@ -62,7 +62,7 @@ def build_pos_emb(config: ModelConfig, *,
     生效位置由工厂自带的 `@input_only` 声明（见 model/pos_emb/base.py），
     注册表之外没有第二份清单。
 
-    逐层调用：attention_heads_pattern 会让每层头数不同 → head_dim 不同，
+    逐层调用：trial 级 heads_per_layer 会让每层头数不同 → head_dim 不同，
     因此每层持有独立实例。
 
     预计算长度取 `PosEmbConfig.max_position_embeddings`，未指定时回退到

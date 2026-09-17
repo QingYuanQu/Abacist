@@ -34,7 +34,7 @@ class Block(nn.Module):
         self.input_layernorm = RMSNorm(config.brain.hidden_size, eps=config.brain.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.brain.hidden_size, eps=config.brain.rms_norm_eps)
         self.mlp = FeedForward(config)
-        # 每层独立实例：attention_heads_pattern 会让各层 head_dim 不同
+        # 每层独立实例：trial 级 heads_per_layer 会让各层 head_dim 不同
         self.pos_emb = build_pos_emb(
             config,
             head_dim=self.self_attn.head_dim,

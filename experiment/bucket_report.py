@@ -8,7 +8,7 @@
   1. 结构等价（生成 ∈ 该 Q 的合法解集合）不在现有 acc / acc_ans / acc_think 三口径内。
      dataset_C 存在一题多解（同一 Q 有多棵等价树），严格串等会系统性低估——
      例如全加的 n=5 样本有多达 14 个合法 POST，命中率上限仅 1/14；
-  2. 分桶报告是**分析产物**，不是课程编排的一部分，不应侵入训练与 report.csv 回写链路。
+  2. 分桶报告是**分析产物**，不是实验编排的一部分，不应侵入训练与 report.csv 回写链路。
 
 判定口径：
   - `结构正确率`：生成串去掉停止符后 ∈ 该样本的 `alt` 集合（一题多解的正确处理方式）；
@@ -65,22 +65,22 @@ def _load_rows(path: str) -> list[dict]:
 
 
 def _eval_trial(exp, trial, device, batch_size: int) -> list[dict] | None:
-    """批量推理单课测试集，返回逐样本判定结果（None = 无 ckpt 跳过）。"""
-    ckpt = trial.artifacts.best_model_path
+    """批量推理单 trial 测试集，返回逐样本判定结果（None = 无 ckpt 跳过）。"""
+    ckpt = trial.paths.best_model
     if not os.path.isfile(ckpt):
         return None
 
     vocab = load_vocab(exp.vocab_path)
 
-    # 套用单课 material 对头结构的覆盖（唯一入口，训练/评测/分析共用）
-    brain_config = exp.brain.with_trial_overrides(trial.material)
+    # 套用该 trial 的逐层头数（唯一入口，训练/评测/分析共用）
+    brain_config = exp.brain.with_trial_overrides(trial.heads)
 
     model = GPT(ModelConfig.from_sources(brain_config, exp.pos_emb, vocab))
     model.load_state_dict(torch.load(ckpt, map_location=device))
     model.to(device)
     model.eval()
 
-    rows = _load_rows(trial.material.test_data_path)
+    rows = _load_rows(trial.paths.test_data)
     prompts = [r['Q'] for r in rows]
     stop_ids = {vocab.stoi[vocab.stop_token]}
 
@@ -169,7 +169,7 @@ def main() -> None:
     summary = []
     csv_rows = []
 
-    for name in [s.strip() for s in args.studies.split(',') if s.strip()]:
+    for name in [s.strip() for s in args.experiments.split(',') if s.strip()]:
         exp = load_experiment(name)
         trials = exp.trials if args.trial is None else [exp.trials[args.trial]]
         for trial in trials:
@@ -194,7 +194,7 @@ def main() -> None:
                 for rl in rows:
                     for cl in cols:
                         c, t = counter.get((rl, cl), (0, 0))
-                        csv_rows.append({"exp": name, "trial": f"L{trial.id}_{trial.display_name}",
+                        csv_rows.append({"exp": name, "trial": f"L{trial.id}_{trial.name}",
                                          "table": "n×bk", "row": rl, "col": cl,
                                          "correct": c, "total": t})
 
@@ -215,11 +215,11 @@ def main() -> None:
                 for rl in rows2:
                     for cl in cols2:
                         c, t = counter2.get((rl, cl), (0, 0))
-                        csv_rows.append({"exp": name, "trial": f"L{trial.id}_{trial.display_name}",
+                        csv_rows.append({"exp": name, "trial": f"L{trial.id}_{trial.name}",
                                          "table": "n×ans_digits", "row": rl, "col": cl,
                                          "correct": c, "total": t})
 
-            summary.append((name, trial.display_name, struct, exact, total))
+            summary.append((name, trial.name, struct, exact, total))
 
     # 表 D：跨 exp × trial 总表
     if summary:
@@ -229,12 +229,12 @@ def main() -> None:
         for _, lname, *_ in summary:
             if lname not in trials_seen:
                 trials_seen.append(lname)
-        studies_seen = []
-        for sname, *_ in summary:
-            if sname not in studies_seen:
-                studies_seen.append(sname)
+        experiments_seen = []
+        for ename, *_ in summary:
+            if ename not in experiments_seen:
+                experiments_seen.append(ename)
         print(" " * _ROW_W + "".join(l.ljust(_COL_W) for l in trials_seen))
-        for sname in studies_seen:
+        for sname in experiments_seen:
             line = sname.ljust(_ROW_W)
             for lname in trials_seen:
                 hit = next((x for x in summary if x[0] == sname and x[1] == lname), None)

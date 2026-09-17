@@ -1,4 +1,3 @@
-import hashlib
 import os
 import re
 import json
@@ -9,6 +8,7 @@ from pathlib import Path
 
 PAD_TOKEN = "<PAD>"   # 全局常量，方便其他模块引用
 STOP_TOKEN = "#"        # 停止 token，所有词表统一使用
+
 
 def build_vocab_from_file(file_path, tokenizer_pattern=None):
     if tokenizer_pattern is None:
@@ -167,83 +167,6 @@ class Vocab:
             return cls.from_dict(json.load(f))
 
 
-def data_config_hash(data_config):
-    """从 DATA 关键参数生成指纹，用于判断词表是否需要重建。"""
-    key_fields = ['ops', 'mode', 'input_fmt', 'repeat', 'start', 'end',
-                  'allow_negative']
-    key = ','.join(f"{k}={data_config.get(k)}" for k in key_fields)
-    return hashlib.md5(key.encode()).hexdigest()[:8]
-
-
-def ensure_vocab(vocab_config, data_config, model_config=None, extra_files=None):
-    """确保词表与当前配置匹配：自动重建。
-
-    自动检测珠态数据（bead_data.jsonl），若存在则合并入词表。
-
-    Args:
-        vocab_config: VOCAB 配置字典
-        data_config: DATA 配置字典
-        model_config: (保留兼容，不再使用)
-        extra_files: 额外的数据文件列表（可选）
-    Returns: vocab_data (dict)
-    """
-    vocab_path = vocab_config['vocab_path']
-    data_path = data_config['train_data_path']
-    current_hash = data_config_hash(data_config)
-
-    # 自动检测珠态数据
-    bead_path = data_config.get('bead_data_path', '')
-    data_files = [data_path]
-    if extra_files:
-        data_files.extend(extra_files)
-    if os.path.isfile(bead_path):
-        data_files.append(bead_path)
-
-    need_rebuild = False
-    reason = ""
-
-    if not os.path.isfile(vocab_path):
-        need_rebuild = True
-        reason = "词表文件不存在"
-    else:
-        try:
-            with open(vocab_path, 'r', encoding='utf-8') as f:
-                existing = json.load(f)
-            meta = existing.get('metadata', {})
-            stored_hash = meta.get('config_hash')
-            stored_files = meta.get('source_files', [meta.get('source_file', '')])
-
-            if stored_hash != current_hash:
-                need_rebuild = True
-                reason = f"配置指纹不匹配 (旧={stored_hash}, 新={current_hash})"
-            elif set(stored_files) != set(data_files):
-                need_rebuild = True
-                reason = f"数据文件列表变更"
-            else:
-                for fp in data_files:
-                    if os.path.isfile(fp) and fp not in stored_files:
-                        need_rebuild = True
-                        reason = f"新增数据文件: {fp}"
-                        break
-        except (json.JSONDecodeError, KeyError):
-            need_rebuild = True
-            reason = "词表文件格式异常"
-
-    if need_rebuild:
-        print(f"[词表] 需要重建: {reason}")
-        print(f"[词表] 正在从 {len(data_files)} 个文件构建词表...")
-        vocab_list, max_seq_len = build_vocab_from_files(data_files)
-        save_vocab_multi(vocab_list, vocab_path,
-                         source_files=data_files,
-                         max_seq_len=max_seq_len,
-                         config_hash=current_hash)
-
-    vocab_data = load_vocab(vocab_path)
-
-    print(f"[词表] 就绪 | vocab_size={vocab_data.vocab_size} "
-          f"| max_seq_len={vocab_data.max_seq_len}")
-    return vocab_data
-
 
 def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash):
     """保存词表（多文件版本），与 save_vocab 兼容。"""
@@ -307,15 +230,15 @@ def _build_vocab_with_cache(vocab_path, data_files):
                         mtimes_match = False
                         break
                 if mtimes_match:
-                    print(f"[课程词表] 缓存命中（{len(data_files)} 个源文件未变），跳过重建")
+                    print(f"[实验词表] 缓存命中（{len(data_files)} 个源文件未变），跳过重建")
                     vocab_data = load_vocab(vocab_path)
-                    print(f"[课程词表] 就绪 | vocab_size={vocab_data.vocab_size} "
+                    print(f"[实验词表] 就绪 | vocab_size={vocab_data.vocab_size} "
                           f"| max_seq_len={vocab_data.max_seq_len}")
                     return vocab_data
         except (json.JSONDecodeError, KeyError, TypeError):
             pass
 
-    print(f"[课程词表] 正在从 {len(data_files)} 个文件构建词表...")
+    print(f"[实验词表] 正在从 {len(data_files)} 个文件构建词表...")
     vocab_list, max_seq_len = build_vocab_from_files(data_files)
     save_vocab_multi(vocab_list, vocab_path,
                      source_files=data_files,
@@ -323,41 +246,9 @@ def _build_vocab_with_cache(vocab_path, data_files):
                      config_hash="curriculum")
 
     vocab_data = load_vocab(vocab_path)
-    print(f"[课程词表] 就绪 | vocab_size={vocab_data.vocab_size} "
+    print(f"[实验词表] 就绪 | vocab_size={vocab_data.vocab_size} "
           f"| max_seq_len={vocab_data.max_seq_len}")
     return vocab_data
-
-
-def ensure_study_vocab(trial_configs, curriculum_config):
-    """扫描全部课程数据文件，构建统一词表（带缓存）—— shared 策略。
-
-    确保词表覆盖所有课程，这样模型权重在课程间
-    传递时 token id 不会错位。
-
-    缓存机制：若词表文件已存在，检查 source_files 列表一致
-    且每个文件 mtime 未变 → 直接复用，跳过重建。
-
-    Args:
-        trial_configs: Trial 列表
-        curriculum_config: CURRICULUM 配置字典
-    Returns:
-        vocab_data (dict)
-    """
-    vocab_path = curriculum_config.get('study_vocab_path',
-                                   curriculum_config.get('vocab_path', 'vocab/study_vocab.json'))
-
-    data_files = []
-    seen = set()
-    for cfg in trial_configs:
-        m = cfg.material
-        for fp in (m.train_data_path,
-                   m.test_data_path,
-                   m.bead_data_path):
-            if fp and os.path.isfile(fp) and fp not in seen:
-                data_files.append(fp)
-                seen.add(fp)
-
-    return _build_vocab_with_cache(vocab_path, data_files)
 
 
 def ensure_experiment_vocab(exp, trial_configs):
@@ -375,8 +266,7 @@ def ensure_experiment_vocab(exp, trial_configs):
     data_files = []
     seen = set()
     for cfg in trial_configs:
-        m = cfg.material
-        for fp in (m.train_data_path, m.test_data_path, m.bead_data_path):
+        for fp in (cfg.paths.train_data, cfg.paths.test_data, cfg.paths.bead_data):
             if fp and os.path.isfile(fp) and fp not in seen:
                 data_files.append(fp)
                 seen.add(fp)

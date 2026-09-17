@@ -1,8 +1,8 @@
 """单课评估 + 单课 CLI（课程编排层，2026-09-04 从 model_lm/eval.py 迁出）。
 
-迁出原因：eval_one_trial 依赖 experiment/trial 聚合对象（exp.trials[].artifacts/material、
-exp.brain/pos_emb/eval、ReportTable 报告回写），属于课程编排而非通用 LM 能力；
-底层的批量推理、准确率统计留在 model_lm/eval.py，此处只做课程侧装配。
+迁出原因：eval_one_trial 依赖 experiment/trial 聚合对象（exp.trials[].paths/material、
+exp.brain/pos_emb/eval、ReportTable 报告回写），属于实验编排而非通用 LM 能力；
+底层的批量推理、准确率统计留在 model_lm/eval.py，此处只做实验侧装配。
 
 用法：
     python -m experiment.trial.eval --experiment default --trial 0 --batch
@@ -32,23 +32,23 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
     """评估单课测试集，返回三种口径准确率与计数。
 
     Args:
-        trial_id: 单课配置（material/artifacts）
-        exp: 学习单元聚合根（brain/eval）
+        trial_id: trial 序号（exp.trials 下标）
+        exp: 实验聚合根（brain/eval）
         ctx: 运行时上下文（vocab_data/device）
-        model_path: 模型权重路径（默认 trial.artifacts.best_model_path）
+        model_path: 模型权重路径（默认 trial.paths.best_model）
         verbose: 是否打印详细信息
     Returns:
         (acc, acc_ans, acc_think, correct, correct_ans, correct_think, total)
     """
     trial = exp.trials[trial_id]
 
-    brain_config = exp.brain.with_trial_overrides(trial.material)
+    brain_config = exp.brain.with_trial_overrides(trial.heads)
     eval_config = exp.eval
     vocab_data = ctx.vocab_data
     device = ctx.device
 
     if model_path is None:
-        model_path = trial.artifacts.best_model_path
+        model_path = trial.paths.best_model
 
     # stop_token 统一从词表读取，消除调用方散传导致的不一致
     stop_token = vocab_data.stop_token
@@ -70,7 +70,7 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
     model.eval()
 
     # 测试数据路径
-    test_data_path = trial.material.test_data_path
+    test_data_path = trial.paths.test_data
     print(f"[评估] 测试数据: {test_data_path}")
 
     if not test_data_path or not os.path.isfile(test_data_path):
@@ -170,9 +170,9 @@ def main():
             print(f"[聊天] 错误：trial={trial_id} 超出范围（0~{len(exp.trials)-1}）")
             return
         trial = exp.trials[trial_id]
-        model_path = trial.artifacts.best_model_path
+        model_path = trial.paths.best_model
         if not os.path.isfile(model_path):
-            print(f"[聊天] 错误：课程模型不存在: {model_path}")
+            print(f"[聊天] 错误：trial 模型不存在: {model_path}")
             print(f"[聊天] 请先运行: python -m experiment --start {trial_id} --end {trial_id}")
             return
 
@@ -183,7 +183,7 @@ def main():
         vocab_data = load_vocab(vocab_path)
 
         model = GPT(ModelConfig.from_sources(
-            exp.brain.with_trial_overrides(trial.material), exp.pos_emb, vocab_data))
+            exp.brain.with_trial_overrides(trial.heads), exp.pos_emb, vocab_data))
         model.load_state_dict(torch.load(model_path, map_location=device))
         model.to(device)
         model.eval()
@@ -200,9 +200,9 @@ def main():
             print(f"[评估] 错误：trial={trial_id} 超出范围（0~{len(exp.trials)-1}）")
             return
         trial = exp.trials[trial_id]
-        model_path = trial.artifacts.best_model_path
+        model_path = trial.paths.best_model
         if not os.path.isfile(model_path):
-            print(f"[评估] 错误：课程模型不存在: {model_path}")
+            print(f"[评估] 错误：trial 模型不存在: {model_path}")
             print(f"[评估] 请先运行: python -m experiment --start {trial_id} --end {trial_id}")
             return
 
@@ -225,8 +225,9 @@ def main():
             correct=correct, correct_ans=correct_ans, correct_think=correct_think,
             total=total,
         )
-        ReportTable(exp.report_csv_path).save_result(trial_id, trial.display_name, record,
-                                                       primary_acc >= pass_threshold)
+        ReportTable(exp.report_path).save_result(
+            trial_id, trial.name, record, primary_acc >= pass_threshold,
+            acc_mode, pass_threshold)
         return
 
     # 两个入口都未指定时给出提示

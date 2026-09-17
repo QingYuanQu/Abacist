@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""experiment/material_adapter.py —— 课程材料适配器（阶段 3+4）。
+"""experiment/material_adapter.py —— 实验材料适配器（阶段 3+4）。
 
 职责：读 Trial.material 配置 → 调底层 parse（表达式生成）+ eval（abacus/digit，经 bridge）
 → 投影成 model_lm 的 material.jsonl（{category, Q, A}）。
@@ -162,8 +162,8 @@ def _iter_exprs(start, end, repeat, op_list, sample, rng):
                     yield tree_idx, op_combo, operands
 
 
-def _generate_expr(m, seed) -> tuple[int, int]:
-    """生成 expr 类型课程数据（流式写 train/test 双文件）。"""
+def _generate_expr(m, paths, seed) -> tuple[int, int]:
+    """生成 expr 类型 trial 数据（流式写 train/test 双文件）。"""
     composer, abacus = make_default_composer()
     digit_fn = make_digit_fn()
 
@@ -171,9 +171,9 @@ def _generate_expr(m, seed) -> tuple[int, int]:
     op_list = list(m.ops)
     rng = random.Random(seed)
 
-    train_f = open(m.train_data_path, 'w', encoding='utf-8')
-    test_f = open(m.test_data_path, 'w', encoding='utf-8') if \
-        (m.test_data_path and m.test_data_path != m.train_data_path) else None
+    train_f = open(paths.train_data, 'w', encoding='utf-8')
+    test_f = open(paths.test_data, 'w', encoding='utf-8') if \
+        (paths.test_data and paths.test_data != paths.train_data) else None
 
     train_count = test_count = filtered = 0
     try:
@@ -206,8 +206,8 @@ def _generate_expr(m, seed) -> tuple[int, int]:
 
             # 4. 投影 Q/A
             inst = build_instance(record, steps)
-            q = project_q(inst, m.input_fmt)
-            a = project_a(inst, m.parse, m.eval, m.input_fmt, m.abacus_bead)
+            q = project_q(inst, m.input_format)
+            a = project_a(inst, m.parse, m.eval, m.input_format, m.abacus_bead)
             line = json.dumps({"category": ''.join(op_combo), "Q": q, "A": a},
                               ensure_ascii=False) + '\n'
 
@@ -349,16 +349,16 @@ def _generate_bead(start, end, out_path, repeat, ops, allow_negative,
         print(f"[珠态数据] 已生成 {count} 条 → {out_path}")
 
 
-def _generate_dataset(m) -> None:
-    """从 source 投影 dataset 类型课程数据（流式写 train/test，按 sp 字段分流）。
+def _generate_dataset(m, paths) -> None:
+    """从 source 投影 dataset 类型 trial 数据（流式写 train/test，按 sp 字段分流）。
 
     dataset 源（如 dataset_C.jsonl）是原始 IR（Q/pre/post/ANS/sp），不是可直接训练的
     {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标记法
     + '#'，纯结构转换、不求值）；steps 用空表即可（无需 align 注解）。
     """
-    train_f = open(m.train_data_path, 'w', encoding='utf-8')
-    test_f = open(m.test_data_path, 'w', encoding='utf-8') if \
-        (m.test_data_path and m.test_data_path != m.train_data_path) else None
+    train_f = open(paths.train_data, 'w', encoding='utf-8')
+    test_f = open(paths.test_data, 'w', encoding='utf-8') if \
+        (paths.test_data and paths.test_data != paths.train_data) else None
 
     train_count = test_count = 0
     try:
@@ -368,10 +368,16 @@ def _generate_dataset(m) -> None:
                     continue
                 record = json.loads(line)
                 inst = build_instance(record, [])
-                q = project_q(inst, m.input_fmt)
+                q = project_q(inst, m.input_format)
                 a = project_structure_a(inst, m.parse)
+                # 透传结构字段（n/bk/prec_switch/ans_digits/alt）：dataset 源本就带这些
+                # 元数据，分桶评测（bucket_report）按它们出 n×bk 表，丢掉会令分桶失效。
+                # 训练只认 Q/A，多余键被忽略，故透传安全。
+                struct = {k: record[k] for k in
+                          ('n', 'bk', 'prec_switch', 'ans_digits', 'alt')
+                          if k in record}
                 out_line = json.dumps(
-                    {"category": record.get('ops', ''), "Q": q, "A": a},
+                    {"category": record.get('ops', ''), "Q": q, "A": a, **struct},
                     ensure_ascii=False) + '\n'
                 if test_f is not None and record.get('sp') == 'test':
                     test_f.write(out_line)
@@ -387,19 +393,20 @@ def _generate_dataset(m) -> None:
 
 
 def generate_trial(cfg, seed) -> None:
-    """根据单课配置生成数据。cfg 为 Trial 对象。"""
+    """根据单个 trial 的 material 与 paths 生成数据。cfg 为 Trial 对象。"""
     m = cfg.material
+    paths = cfg.paths
     print("=" * 60)
-    print(f"[数据生成] 第{cfg.id}课: {cfg.name} (type={m.type})")
+    print(f"[数据生成] trial {cfg.id}: {cfg.name} (type={m.type})")
     print("=" * 60)
 
     if m.type == 'expr':
-        _generate_expr(m, seed)
+        _generate_expr(m, paths, seed)
     elif m.type == 'bead':
-        _generate_bead(m.start, m.end, m.train_data_path, m.repeat, m.ops,
-                       m.allow_negative, m.sample, m.test_data_path, m.split,
+        _generate_bead(m.start, m.end, paths.train_data, m.repeat, m.ops,
+                       m.allow_negative, m.sample, paths.test_data, m.split,
                        seed, base=m.abacus_base)
     elif m.type == 'dataset':
-        _generate_dataset(m)
+        _generate_dataset(m, paths)
     else:
         raise ValueError(f"未知 material.type: {m.type!r}（env 类型已删除）")

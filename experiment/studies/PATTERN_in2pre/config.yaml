@@ -1,0 +1,75 @@
+# 实验配置 —— 唯一输入文件。
+# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# id 由列表位置派生（0..N-1），不要手写。
+name: PATTERN_in2pre
+data_seed: 42
+brain:
+  hidden_size: 64
+  num_attention_heads: 4
+  num_hidden_layers: 5
+  attn_type: sdpa
+pos_emb:
+  theta: 1000000.0
+  pos_type: rope
+  rope_type: default
+  max_position_embeddings: 256
+  scaling:
+    enabled: false
+    type: yarn
+    factor: 8
+    original_max_position_embeddings: 128
+    beta_fast: 4
+    beta_slow: 1
+    attention_factor: 1.0
+train:
+  enable_validation: true
+  early_stop_patience: 5
+  dropout: 0.0
+  train_seed: 42
+eval:
+  eval_batch_size: 1024
+  print_interval: 1000
+  acc_mode: acc
+  pass_threshold: 0.95
+trial_defaults:
+  # 所有 trial 学同一份 dataset_C 投影（infix → pre）；只变头结构（heads）。
+  material:
+    type: dataset
+    repeat: 0
+    start: 0
+    end: 0
+    allow_negative: false
+    input_format: infix
+    parse: pre
+    eval: none
+    split: 0.2
+    abacus_bead: false
+    abacus_style: song
+    source: parse/dataset/dataset_C.jsonl
+  method:
+    epochs: 25
+    repeat_factor: 1
+    batch_size: 64
+    learning_rate: 0.001
+    shuffle: true
+trials:
+  - {name: regular-1, heads: [1, 1, 1, 1, 1]}
+  - {name: regular-2, heads: [2, 2, 2, 2, 2]}
+  - {name: regular-4, heads: [4, 4, 4, 4, 4]}
+  - {name: regular-8, heads: [8, 8, 8, 8, 8]}
+  - {name: regular-16, heads: [16, 16, 16, 16, 16]}
+  - {name: regular-32, heads: [32, 32, 32, 32, 32]}
+  - {name: regular-64, heads: [64, 64, 64, 64, 64]}
+  - {name: focus-4, heads: [1, 2, 4, 2, 1]}
+  - {name: focus-8, heads: [1, 4, 8, 4, 1]}
+  - {name: focus-16, heads: [1, 8, 16, 8, 1]}
+  - {name: expansion-4, heads: [4, 2, 1, 2, 4]}
+  - {name: expansion-8, heads: [8, 4, 1, 4, 8]}
+  - {name: expansion-16, heads: [16, 8, 1, 8, 16]}
+  - {name: balanced-4, heads: [4, 2, 2, 1, 1]}
+  - {name: balanced-8, heads: [8, 4, 4, 2, 1]}
+  - {name: balanced-16, heads: [16, 8, 4, 2, 1]}
+  - {name: balanced2-4, heads: [1, 1, 2, 2, 4]}
+  - {name: balanced2-8, heads: [1, 2, 4, 4, 8]}
+  - {name: balanced2-16, heads: [1, 2, 4, 8, 16]}

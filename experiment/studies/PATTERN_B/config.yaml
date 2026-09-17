@@ -1,0 +1,56 @@
+# 实验配置 —— 唯一输入文件。
+# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# id 由列表位置派生（0..N-1），不要手写。
+name: PATTERN_B
+data_seed: 42
+brain:
+  hidden_size: 64
+  num_attention_heads: 4
+  num_hidden_layers: 5
+  attn_type: sdpa
+pos_emb:
+  theta: 1000000.0
+  scaling:
+    enabled: false
+    type: yarn
+    factor: 8
+    original_max_position_embeddings: 128
+    beta_fast: 4
+    beta_slow: 1
+    attention_factor: 1.0
+train:
+  enable_validation: true
+  early_stop_patience: 5
+  dropout: 0.0
+  train_seed: 42
+eval:
+  eval_batch_size: 1024
+  print_interval: 1000
+  acc_mode: acc
+  pass_threshold: 0.95
+trial_defaults:
+  # 所有 trial 学同一份 dataset_C 投影（post）；只变头结构（heads 同宽）与逐头 RoPE 基频。
+  material:
+    type: dataset
+    repeat: 0
+    start: 0
+    end: 0
+    allow_negative: false
+    parse: post
+    eval: none
+    split: 0.2
+    abacus_bead: false
+    abacus_style: song
+    source: parse/dataset/dataset_C.jsonl
+  method:
+    epochs: 25
+    repeat_factor: 1
+    batch_size: 64
+    learning_rate: 0.001
+    shuffle: true
+trials:
+  - {name: mixB1, heads: [4, 4, 4, 4, 4], theta_per_head: [10000000.0, 1000000.0, 1000.0, 100.0]}
+  - {name: mixB2, heads: [4, 4, 4, 4, 4], theta_per_head: [10000000.0, 10000000.0, 1000.0, 1000.0]}
+  - {name: mixB3, heads: [4, 4, 4, 4, 4], theta_per_head: [10000000.0, 10000000.0, 10000000.0, 10000000.0]}
+  - {name: mixB4, heads: [4, 4, 4, 4, 4], theta_per_head: [1000.0, 1000.0, 1000.0, 1000.0]}

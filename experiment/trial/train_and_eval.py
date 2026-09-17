@@ -24,7 +24,7 @@ def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) 
     trial_name = trial.name
     method = trial.method
     pass_threshold = exp.eval.pass_threshold if exp.eval else 0.95
-    model_path = trial.artifacts.best_model_path
+    model_path = trial.paths.best_model
 
     # 根据 kind 选择用户可见标签
     tag = "[实验]"
@@ -56,7 +56,7 @@ def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) 
         acc, acc_ans, acc_think, correct, correct_ans, correct_think, total = eval_one_trial(
             trial_id, exp, ctx, model_path=model_path, verbose=False)
         best_record = Record(
-            epoch=ctx.epochs,
+            epoch=method.epochs,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             acc=acc, acc_ans=acc_ans, acc_think=acc_think,
             correct=correct, correct_ans=correct_ans, correct_think=correct_think,

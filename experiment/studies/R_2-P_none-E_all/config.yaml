@@ -1,0 +1,48 @@
+# 实验配置 —— 唯一输入文件。
+# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# id 由列表位置派生（0..N-1），不要手写。
+name: R_2-P_none-E_all
+data_seed: 42
+brain:
+  hidden_size: 64
+  num_attention_heads: 8
+  num_hidden_layers: 5
+pos_emb:
+  theta: 1000000.0
+train:
+  enable_validation: true
+  early_stop_patience: 5
+  dropout: 0.0
+  train_seed: 42
+eval:
+  eval_batch_size: 1024
+  print_interval: 1000
+  acc_mode: acc_ans
+  pass_threshold: 0.9
+trial_defaults:
+  # 所有 trial 用同一份 4 位加法枚举（infix, parse=none）；只差 eval 与 abacus_bead，
+  # 故放 defaults，trial 仅以 material:{eval: ..., abacus_bead: ...} 写差量。
+  material:
+    type: expr
+    ops: +
+    repeat: 2
+    start: 0
+    end: 10000
+    allow_negative: false
+    input_format: infix
+    parse: none
+    sample: 1000
+    split: 0.2
+    abacus_style: song
+  method:
+    epochs: 50
+    repeat_factor: 1
+    batch_size: 512
+    learning_rate: 0.001
+    shuffle: true
+trials:
+  - {name: 4位_直接计算, material: {eval: none, abacus_bead: false}}
+  - {name: 4位_数位分解, material: {eval: digit, abacus_bead: false}}
+  - {name: 4位_珠算, material: {eval: abacus, abacus_bead: false}}
+  - {name: 4位_珠算_盘面, material: {eval: abacus, abacus_bead: true}}

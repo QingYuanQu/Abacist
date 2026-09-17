@@ -23,7 +23,7 @@ class PosEmbedding(nn.Module):
     """位置编码基类（同时就是 NoPE 实现）。
 
     Args:
-        head_dim:     该层每个注意力头的维度（逐层可能不同，见 attention_heads_pattern）
+        head_dim:     该层每个注意力头的维度（逐层可能不同，见 heads_per_layer）
         layer_idx:    层序号（供按层定制的编码使用）
         max_len:      预计算/分配的最大位置数
         num_heads:    该层注意力头数（ALiBi 等按头区分的编码需要）

@@ -1,0 +1,49 @@
+# 实验配置 —— 唯一输入文件。
+# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# id 由列表位置派生（0..N-1），不要手写。
+name: R_12-P_all-E_none
+data_seed: 42
+brain:
+  hidden_size: 256
+  num_attention_heads: 8
+  num_hidden_layers: 5
+pos_emb:
+  theta: 1000000.0
+train:
+  enable_validation: true
+  early_stop_patience: 5
+  dropout: 0.0
+  train_seed: 42
+eval:
+  eval_batch_size: 1024
+  print_interval: 1000
+  acc_mode: acc_ans
+  pass_threshold: 0.95
+trial_defaults:
+  # 所有 trial 用同一份 expr 枚举（ops/repeat/range/...）；只差 parse 投影，故放 defaults，
+  # trial 仅以 material:{parse: ...} 写差量（schema 做字段级合并）。
+  material:
+    type: expr
+    ops: '+-×'
+    repeat: 12
+    start: 0
+    end: 10
+    allow_negative: false
+    eval: none
+    sample: 5000
+    split: 0.2
+    abacus_bead: false
+    abacus_style: song
+  method:
+    epochs: 50
+    repeat_factor: 1
+    batch_size: 700
+    learning_rate: 0.001
+    shuffle: true
+trials:
+  - {name: none, material: {parse: none}}
+  - {name: pre, material: {parse: pre}}
+  - {name: post, material: {parse: post}}
+  - {name: prepost, material: {parse: prepost}}
+  - {name: prepost_stack, material: {parse: prepost_stack}}

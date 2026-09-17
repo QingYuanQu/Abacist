@@ -1,32 +1,34 @@
-"""store.py — 学习单元三表 CSV 读写（无 schema，原始字符串行）。
+"""store.py — 实验结果表（report.csv）读写。
 
-表结构（按概念域拆分，id 关联；三表均冗余 name 列便于人读）：
-    material.csv  学什么（Material 字段）
-    method.csv    怎么学（Method 字段）
-    report.csv    学得怎么样（最优 Record 全字段 + passed）
+配置只有两个来源：`config.yaml`（唯一输入，见 experiment/schema.py）和磁盘产物。
+本模块只负责**结果**这一侧：每行 = 一个 trial 的最优 Record + 判定口径 + passed。
+
+行内保留 `name` 不只是为了人读——它是配置指纹：加载时若 `report.csv` 的 name 与
+config.yaml 对不上，说明 trials 被重排/改名/增删，此时旧结果不可复用，直接报错。
 """
 
 import csv
 import os
 import tempfile
 
-from config import RECORD_FIELDS
+from config import RECORD_FIELDS, Record
 
-MATERIAL_COLS = [
-    "id", "name", "type", "ops", "repeat", "start", "end",
-    "allow_negative", "input_format", "parse", "eval", "sample",
-    "forbidden_patterns", "split", "abacus_bead", "abacus_order", "abacus_snapshot",
-    "abacus_style", "env_steps", "source", "variant",
-]
-METHOD_COLS = ["id", "name", "repeat_factor", "epochs", "batch_size", "learning_rate", "shuffle"]
-REPORT_COLS = ["id", "name"] + RECORD_FIELDS + ["passed"]
+# id/name 是身份，acc_mode/pass_threshold 让每行自带判定口径
+# （旧格式只有 passed 而无口径，同一文件里 0.15 判过、0.26 判不过，无法自证）
+REPORT_COLS = ["id", "name"] + RECORD_FIELDS + ["acc_mode", "pass_threshold", "passed"]
 
 
-class _CsvTable:
-    """CSV 原子读写基类（原始字符串行，类型转换交给调用方）。"""
+class ReportMismatch(Exception):
+    """report.csv 与当前 config.yaml 不一致 —— 旧结果不可复用。"""
+
+
+class ReportTable:
+    """report.csv —— 每个 trial 的最优 Record + 判定口径 + passed。"""
 
     def __init__(self, path: str):
         self.path = path
+
+    # ---------- 读 ----------
 
     def all(self) -> list[dict]:
         """返回原始字符串行；文件不存在返回空列表。"""
@@ -35,8 +37,80 @@ class _CsvTable:
         with open(self.path, "r", encoding="utf-8", newline="") as f:
             return list(csv.DictReader(f))
 
-    def _save(self, fieldnames: list[str], rows: list[dict]):
+    def load(self, names: list[str]) -> dict[int, tuple[Record | None, bool | None]]:
+        """按 id 读取每个 trial 的结果，并校验身份指纹。
+
+        返回 {trial_id: (record, passed)}；缺行/空行的 trial 不出现在结果里。
+        """
+        out: dict[int, tuple[Record | None, bool | None]] = {}
+        for row in self.all():
+            raw_id = (row.get("id") or "").strip()
+            if not raw_id:
+                continue
+            try:
+                tid = int(raw_id)
+            except ValueError:
+                raise ReportMismatch(f"{self.path}: id={raw_id!r} 不是整数") from None
+            if not 0 <= tid < len(names):
+                raise ReportMismatch(
+                    f"{self.path}: 存在 id={tid} 的行，但当前只有 {len(names)} 个 trial")
+            row_name = (row.get("name") or "").strip()
+            if row_name != names[tid]:
+                raise ReportMismatch(
+                    f"{self.path}: trial id={tid} 的 name={row_name!r} 与配置 {names[tid]!r} 不一致；"
+                    f"trials 已被重排/改名/增删，请用 --reset-eval 清理结果后重跑")
+            passed_s = (row.get("passed") or "").strip()
+            out[tid] = (Record.from_csv_row(row), (passed_s == "1") if passed_s else None)
+        return out
+
+    # ---------- 写 ----------
+
+    def save_result(self, trial_id: int, trial_name: str, record: Record | None,
+                    passed: bool, acc_mode: str, pass_threshold: float) -> None:
+        """写回单 trial 最优 Record 及判定口径（无则追加行）。
+
+        **非空合并**：空值代表"本次没有这方面的信息"，不得覆盖行内已有值。
+        否则 eval-only 的重跑（其 Record 无 train_loss/lr/时间）会把训练元信息抹掉。
+        """
+        row = {"id": str(trial_id), "name": trial_name,
+               **(record.to_csv_row() if record is not None else {}),
+               "acc_mode": acc_mode,
+               "pass_threshold": f"{pass_threshold:g}",
+               "passed": "1" if passed else "0"}
+        rows = self.all()
+        for r in rows:
+            if (r.get("id") or "").strip() == str(trial_id):
+                for k, v in row.items():
+                    if v != "":
+                        r[k] = v
+                break
+        else:
+            rows.append(row)
+        self._save(REPORT_COLS, rows)
+
+    def clear_results(self, trial_ids=None) -> int:
+        """清空结果列（保留 id/name 行）。trial_ids=None 表示全部。返回清除行数。"""
+        keys = set(map(str, trial_ids)) if trial_ids else None
+        keep = {"id", "name"}
+        rows = self.all()
+        count = 0
+        for r in rows:
+            if keys is None or (r.get("id") or "").strip() in keys:
+                for c in REPORT_COLS:
+                    if c not in keep and c in r:
+                        r[c] = ""
+                count += 1
+        if count:
+            self._save(REPORT_COLS, rows)
+        return count
+
+    def write_header(self) -> None:
+        """写入仅表头的空表。"""
+        self._save(REPORT_COLS, [])
+
+    def _save(self, fieldnames: list[str], rows: list[dict]) -> None:
         """原子写入：临时文件 + os.replace。"""
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         dirname = os.path.dirname(self.path) or "."
         fd, tmp = tempfile.mkstemp(dir=dirname, suffix=".csv")
         try:
@@ -49,48 +123,3 @@ class _CsvTable:
             if os.path.isfile(tmp):
                 os.remove(tmp)
             raise
-
-    def write_header(self, fieldnames: list[str]):
-        """写入仅表头的空表。"""
-        self._save(fieldnames, [])
-
-
-class MaterialTable(_CsvTable):
-    """material.csv —— 学什么。"""
-
-
-class MethodTable(_CsvTable):
-    """method.csv —— 怎么学。"""
-
-
-class ReportTable(_CsvTable):
-    """report.csv —— 最优 Record + passed。"""
-
-    def save_result(self, trial_id: int, trial_name: str, record, passed: bool):
-        """写回单课最优 Record 及通过判定（无则追加行）。"""
-        row = {"id": str(trial_id), "name": trial_name,
-               **record.to_csv_row(), "passed": "1" if passed else "0"}
-        rows = self.all()
-        for r in rows:
-            if r["id"].strip() == str(trial_id):
-                r.update(row)
-                break
-        else:
-            rows.append(row)
-        self._save(REPORT_COLS, rows)
-
-    def clear_results(self, trial_ids=None):
-        """清空结果列（保留 id/name 行）。trial_ids=None 表示全部。返回清除行数。"""
-        keys = set(map(str, trial_ids)) if trial_ids else None
-        keep = {"id", "name"}
-        rows = self.all()
-        count = 0
-        for r in rows:
-            if keys is None or r["id"].strip() in keys:
-                for c in REPORT_COLS:
-                    if c not in keep and c in r:
-                        r[c] = ""
-                count += 1
-        if count:
-            self._save(REPORT_COLS, rows)
-        return count
