@@ -3,7 +3,8 @@ from datetime import datetime
 
 import torch
 from experiment.trial.eval import eval_one_trial
-from config import Experiment, ExecutionContext, Record
+from experiment.config import Experiment, ExecutionContext
+from model.record import Record
 from experiment.trial.trial_train import train_one_trial
 
 # ==================== 单 trial 训练+评估循环 ====================

@@ -10,7 +10,8 @@ from functools import partial
 from torch.utils.data import DataLoader
 from torch import optim
 
-from config import Experiment, Trial, ExecutionContext, Record
+from experiment.config import Experiment, Trial, ExecutionContext
+from model.record import Record
 from model.config import ModelConfig
 
 def collate_fn(pad_id, batch):

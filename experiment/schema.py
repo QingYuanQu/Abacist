@@ -10,7 +10,7 @@
 因此本模块的硬性约定：
 
 1. **YAML 键 = dataclass 字段名**，未登记的键一律报错而非忽略。
-2. **只此一处认识文件格式**。`config.py` 是纯数据定义，`model.config` 是纯模型参数，
+2. **只此一处认识文件格式**。`experiment/config.py` 是纯数据定义，`model.config` 是纯模型参数，
    二者都不碰 YAML；`loader.py` 只负责磁盘布局与聚合根装配。
 3. **校验一次性收集全部错误再抛出**，避免"改一处、跑一次"。
 4. 作用域严格两级，不可混淆：
@@ -38,7 +38,7 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import yaml
 
-from config import EvalConfig, Material, Method, TrainConfig
+from experiment.config import EvalConfig, Material, Method, TrainConfig
 from model.config import BrainConfig, PosEmbConfig
 # 只取"名字清单"（torch 无关）。校验一份 YAML 不该拉起 torch：
 # 既慢，又会把 OpenMP 运行库带进进程，导致此后 matplotlib 保存图片直接中止。
@@ -542,7 +542,7 @@ def clone_text(path: str, new_name: str) -> str:
 def skeleton(name: str) -> str:
     """生成新实验的 config.yaml 模板（新实验从这里开始改）。"""
     return f"""# 实验配置 —— 唯一输入文件。
-# 所有键名 = config.py / model/config.py 的 dataclass 字段名，写错会直接报错。
+# 所有键名 = experiment/config.py / model/config.py 的 dataclass 字段名，写错会直接报错。
 # 作用域：brain / pos_emb / train / eval 是实验级；material / method / heads 是 trial 级。
 name: {name}
 data_seed: 42

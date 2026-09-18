@@ -11,7 +11,7 @@
 import csv
 import os
 
-from config import RECORD_FIELDS, Record
+from model.record import RECORD_FIELDS, Record
 
 # id/name 是身份，acc_mode/pass_threshold 让每行自带判定口径
 # （旧格式只有 passed 而无口径，同一文件里 0.15 判过、0.26 判不过，无法自证）

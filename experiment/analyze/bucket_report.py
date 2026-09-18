@@ -32,7 +32,7 @@ from model import GPT
 from model.config import ModelConfig
 from model.vocab import load_vocab
 from model_lm.eval import generate_batch
-from experiment.loader import load_experiment
+from experiment.tools.loader import load_experiment
 
 # 分桶档位（闭区间；99 表示「及以上」）
 N_BANDS = [(2, 5), (6, 8), (9, 12), (13, 20)]

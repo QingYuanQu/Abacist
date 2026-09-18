@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from config import Experiment, Material, TrialPaths
+from experiment.config import Experiment, Material, TrialPaths
 
 
 @pytest.fixture

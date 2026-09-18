@@ -1,4 +1,4 @@
-"""experiment 的 CLI 入口 —— 跑实验、看状态、重置产物。
+"""experiment 的 CLI 入口 —— 只做参数解析与派发，编排逻辑在 runner.py。
 
 用法：
     python -m experiment --experiment PATTERN_in2post              # 跑全部未通过 trial
@@ -13,62 +13,17 @@ import argparse
 import os
 import sys
 
-import torch
-
-from config import Experiment
-from experiment.cleanup import reset_data, reset_eval, reset_from, reset_full
-from experiment.loader import clone_experiment, init_experiment, load_experiment
-from experiment.material_adapter import generate_trial
-from experiment.runner import _run_experiment
+from experiment.config import Experiment
+from experiment.tools.cleanup import reset_data, reset_eval, reset_from, reset_full
+from experiment.tools.loader import clone_experiment, init_experiment, load_experiment
+from experiment.runner import run_experiment
 from experiment.schema import ConfigError, UnsupportedFeature
-from experiment.store import ReportMismatch
-from model.vocab import ensure_experiment_vocab
+from experiment.tools.store import ReportMismatch
 
 TAG = "[实验]"
 
 
-# ==================== 公共前置函数 ====================
-
-def prepare_all(exp: Experiment):
-    """公共前置：生成全部 trial 的数据 + 构建共享词表。
-
-    Returns:
-        {trial_id: vocab_data}（experiment 语义下所有 trial 共享同一份词表）
-    """
-    print(f"{TAG} 步骤1: 确保全部 trial 数据就绪...")
-    os.makedirs(exp.material_dir, exist_ok=True)
-    for trial in exp.trials:
-        paths = trial.paths
-        if not os.path.isfile(paths.train_data) or \
-                (paths.test_data and not os.path.isfile(paths.test_data)):
-            generate_trial(trial, exp.data_seed)
-
-    # 词表按去重后的数据文件集合构建一份（experiment 语义：数据/词表共享，训练独立）
-    print(f"{TAG} 步骤2: 构建共享词表...")
-    return ensure_experiment_vocab(exp, exp.trials)
-
-
-def _print_progress(exp: Experiment):
-    """打印实验整体进度（已通过/未通过/待评估）。"""
-    passed = failed = pending = 0
-    acc_mode = exp.eval.acc_mode if exp.eval else "acc"
-
-    print(f"\n{TAG} 进度总览（判定口径: {acc_mode}）:")
-    for trial in exp.trials:
-        r = trial.record
-        if r is None or getattr(r, acc_mode) is None:
-            status, pending = "待评估", pending + 1
-        else:
-            acc = getattr(r, acc_mode)
-            if trial.passed:
-                status, passed = f"通过 ({acc*100:.2f}%)", passed + 1
-            else:
-                status, failed = f"未通过 ({acc*100:.2f}%)", failed + 1
-        print(f"  #{trial.id}: {trial.name} — {status}")
-
-    print(f"{TAG} 汇总: 共 {len(exp.trials)} 个 trial | 通过 {passed} | "
-          f"未通过 {failed} | 待评估 {pending}")
-
+# ==================== 只读报告 ====================
 
 def _dry_run_report(exp: Experiment):
     """只读检查：不生成数据、不训练，只报告配置与产物就绪情况。"""
@@ -87,32 +42,6 @@ def _dry_run_report(exp: Experiment):
             acc = getattr(t.record, acc_mode)
             result = f"acc={acc*100:.2f}% passed={t.passed}" if acc is not None else "—"
         print(f"  {t.id:>3}  {t.name:<18} {str(t.heads):<26} {data_ok:<6} {model_ok:<6} {result}")
-
-
-def run_experiment(exp: Experiment, start_trial=None, end_trial=None):
-    """跑实验：从 start_trial 到 end_trial（含），逐 trial 独立训练。"""
-    print("=" * 60)
-    print(f"{TAG} Abacist 实验编排器")
-    print(f"{TAG} Experiment: {exp.name}")
-    print("=" * 60)
-
-    _print_progress(exp)
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"\n{TAG} 设备: {device}")
-
-    print(f"\n{TAG} 公共前置：确保全部 trial 数据就绪 + 构建词表...")
-    trial_vocabs = prepare_all(exp)
-
-    total = len(exp.trials)
-    last_id = total - 1
-    start_trial = 0 if start_trial is None else max(0, start_trial)
-    end_trial = last_id if end_trial is None else min(last_id, end_trial)
-    if start_trial > end_trial:
-        print(f"{TAG} [WARN] start={start_trial} > end={end_trial}，无 trial 需要运行。")
-        return
-
-    _run_experiment(exp, start_trial, end_trial, trial_vocabs, device)
 
 
 # ==================== CLI ====================

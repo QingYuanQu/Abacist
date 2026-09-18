@@ -18,8 +18,8 @@ experiment/__main__.py 的 --reset 系列命令是这些原子函数的组合。
 import glob
 import os
 
-from config import Experiment
-from experiment.store import ReportTable
+from experiment.config import Experiment
+from experiment.tools.store import ReportTable
 
 
 def _resolve_trial_ids(trials, from_trial=None):

@@ -43,7 +43,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import numpy as np
 
-from experiment.loader import load_experiment
+from experiment.tools.loader import load_experiment
 
 # 中文字体（Windows 常见；找不到则回退默认）
 for _cand in ("Microsoft YaHei", "SimHei", "Noto Sans SC"):

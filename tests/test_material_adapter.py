@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from config import Experiment, Material, TrialPaths
+from experiment.config import Experiment, Material, TrialPaths
 from experiment.material_adapter import _generate_dataset
 
 _STRUCT_FIELDS = ("n", "bk", "prec_switch", "ans_digits", "alt")

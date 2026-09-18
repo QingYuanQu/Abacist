@@ -1,6 +1,6 @@
 """模型配置 —— 架构参数与位置编码，模型层的唯一配置来源。
 
-从顶层 `config.py` 迁出（2026-09-04）：这三个类与实验域（Experiment/Trial/Material）
+从 `experiment/config.py`（原顶层 config.py）迁出（2026-09-04）：这三个类与实验域（Experiment/Trial/Material）
 无关，`model_vlm` / `model_vm` 原本为了拿它们而被迫 import 整套实验概念。
 
 依赖方向：`config.py`（实验域）→ `model.config`（模型域）→ 无。

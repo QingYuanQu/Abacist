@@ -32,7 +32,7 @@ def test_rope_types_match_rope_init():
 def test_schema_import_does_not_pull_torch():
     """配置校验链路（experiment.schema / loader）必须保持 torch 无关。"""
     code = ("import sys\n"
-            "import experiment.schema, experiment.loader\n"
+            "import experiment.schema, experiment.tools.loader\n"
             "bad = [m for m in sys.modules if m.split('.')[0] in ('torch', 'numpy')]\n"
             "print(bad)\n"
             "sys.exit(1 if bad else 0)\n")

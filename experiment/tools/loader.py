@@ -9,9 +9,9 @@
 
 import os
 
-from config import Experiment, Trial, TrialPaths
+from experiment.config import Experiment, Trial, TrialPaths
 from experiment.schema import clone_text, load_spec, skeleton
-from experiment.store import ReportTable
+from experiment.tools.store import ReportTable
 
 # 实验目录下的产物子目录（均为可再生，不参与版本控制）
 ARTIFACT_DIRS = ("material", "vocab", "memory", "logs")
@@ -37,7 +37,9 @@ def load_experiment(name: str, project_root: str | None = None) -> Experiment:
         Experiment 聚合根
     """
     if project_root is None:
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # 由 experiment 包位置反推仓库根，避免依赖本文件所在层级（曾因挪入 tools/ 而错位）
+        import experiment
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(experiment.__file__)))
     root_dir = experiment_dir(project_root, name)
     if not os.path.isdir(root_dir):
         raise FileNotFoundError(f"实验目录不存在: {root_dir}")

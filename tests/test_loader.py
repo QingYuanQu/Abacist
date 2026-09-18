@@ -7,8 +7,8 @@ import os
 
 import pytest
 
-from config import Experiment
-from experiment.loader import (ARTIFACT_DIRS, clone_experiment, experiment_dir,
+from experiment.config import Experiment
+from experiment.tools.loader import (ARTIFACT_DIRS, clone_experiment, experiment_dir,
                                init_experiment, load_experiment, studies_root)
 
 NAME = "TMP_EXP"
@@ -62,8 +62,8 @@ def test_clone_copies_config_but_not_results(tmp_path):
 
 
 def test_load_backfills_results_from_report_csv(tmp_path):
-    from config import Record
-    from experiment.store import ReportTable
+    from model.record import Record
+    from experiment.tools.store import ReportTable
 
     init_experiment(NAME, str(tmp_path))
     exp = load_experiment(NAME, str(tmp_path))

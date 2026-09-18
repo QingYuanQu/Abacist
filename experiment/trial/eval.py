@@ -13,8 +13,8 @@ import os
 
 import torch
 
-from experiment.loader import load_experiment
-from config import ExecutionContext
+from experiment.tools.loader import load_experiment
+from experiment.config import ExecutionContext
 from model.config import ModelConfig
 from model import GPT
 from model.vocab import load_vocab

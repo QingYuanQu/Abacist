@@ -10,8 +10,8 @@ import os
 
 import pytest
 
-from config import Record
-from experiment.store import REPORT_COLS, ReportMismatch, ReportTable
+from model.record import Record
+from experiment.tools.store import REPORT_COLS, ReportMismatch, ReportTable
 
 
 def full_record() -> Record:
