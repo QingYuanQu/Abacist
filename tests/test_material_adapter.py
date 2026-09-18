@@ -120,10 +120,10 @@ def _read_rows(*paths):
 
 
 def test_dataset_projection_aggregates_alt_from_real_format(exp, tmp_path):
-    """真实 dataset_C 格式：源**不含** alt/prec_switch/ans_digits，只带 gid + 多解姊妹树。
+    """真实 dataset_D 格式：源**不含** alt/prec_switch/ans_digits，只带 gid + 多解姊妹树。
 
     投影必须按 Q 聚合多解 alt，否则 bucket_report 的结构正确率会退化为严格串等
-    （命中率上限 1/14），这正是 dataset_C 引入多解设计要避免的系统性低估。
+    （命中率上限 1/14），这正是 dataset_D 引入多解设计要避免的系统性低估。
     此测试用真实格式源，修复前会因透传不存在的键而 KeyError（红），修复后绿。
     """
     src = tmp_path / "src.jsonl"
@@ -154,7 +154,7 @@ def test_dataset_projection_aggregates_alt_from_real_format(exp, tmp_path):
 
 
 def test_dataset_projection_computes_prec_switch_and_ans_digits(exp, tmp_path):
-    """真实 dataset_C 格式：源**不含** prec_switch/ans_digits，必须现算（而非透传）。
+    """真实 dataset_D 格式：源**不含** prec_switch/ans_digits，必须现算（而非透传）。
 
     修复前输出无这两个键，断言 KeyError（红）；修复后 bucket_report 的表 B/表 C
     才能拿到维度出表，而非静默空白。

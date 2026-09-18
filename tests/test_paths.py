@@ -17,20 +17,20 @@ def exp(tmp_path):
 
 def test_dataset_paths_shared_by_projection_key(exp):
     """dataset 按 (source, input_format, parse, eval) 四元组共享 train/test。"""
-    m = Material(type="dataset", source="parse/dataset/dataset_C.jsonl",
+    m = Material(type="dataset", source="parse/dataset/dataset_D.jsonl",
                  input_format="infix", parse="post", eval="none", split=0.2)
     a = TrialPaths.for_trial(exp, 0, "regular-1", m)
     b = TrialPaths.for_trial(exp, 6, "regular-64", m)   # id/name 不同，投影参数相同
 
     assert a.train_data == b.train_data
     assert a.test_data == b.test_data
-    assert os.path.basename(a.train_data) == "dataset_C_infix_post_none_train.jsonl"
-    assert os.path.basename(a.test_data) == "dataset_C_infix_post_none_test.jsonl"
+    assert os.path.basename(a.train_data) == "dataset_D_infix_post_none_train.jsonl"
+    assert os.path.basename(a.test_data) == "dataset_D_infix_post_none_test.jsonl"
     assert a.bead_data == ""
 
 
 def test_dataset_projection_key_depends_on_eval_and_parse(exp):
-    base = dict(type="dataset", source="parse/dataset/dataset_C.jsonl",
+    base = dict(type="dataset", source="parse/dataset/dataset_D.jsonl",
                 input_format="infix", parse="post", eval="none")
     other_eval = dict(base, eval="digit")
     other_fmt = dict(base, input_format="postfix")

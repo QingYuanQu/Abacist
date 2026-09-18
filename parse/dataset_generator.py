@@ -6,8 +6,13 @@ Generates datasets A, B, C, D for arithmetic expression parsing and evaluation.
 
 Stage 1 (A): Letters, fully parenthesized infix. Test parse ability (Q->pre,post,stack).
 Stage 2 (B): Letters, redundant parens removed (rules #1-#3). Still test parse.
-Stage 3 (C): Real numbers, more parens removed (rules #1-#5). Group by Q, test ANS.
-Stage 4 (D): Same as C with explicit Zipf-1 length distribution (T(n) = T(6)*6/n for n=6..20).
+Stage 3 (C): Letters, MORE parens removed (rules #1-#5, ambiguous). Group by Q, test parse
+            by structural acceptance (no arithmetic; multi-solution -> any valid parse passes).
+Stage 4 (D): Real numbers, rules #1-#5 (ambiguous), Q-grouped, multi-solution, test ANS.
+
+All four datasets share the Zipf-1 length distribution (T(n) = T(6)*6/n for n>=6),
+folded into generate_base(). So C is the letter form of D: same trees / same length
+distribution / same ambiguous paren removal, only the leaves differ (letters vs numbers).
 
 Tree representation:
   Leaf:     ['L', char]
@@ -648,11 +653,58 @@ def count_div(t):
 # ============================ Dataset Generation ============================
 
 def make_dataset_c(samples, rng):
-    """Dataset C: numbers, rules #1-#5, multi-solution groups keyed by flat Q.
+    """Dataset C: letters, rules #1-#5 (ambiguous), Q-grouped, multi-solution.
 
-    关键改动：填数前先按「字母压平串」分组（中缀压平保持叶子从左到右顺序），
-    同组树共用一套数字 -> Q 相同、ANS 由结合律恒等 -> split_by_q 真正生效。
-    生成策略：先用回溯生成器喂组内约束最严的主树，再用同一套数字校验组内其余树。
+    字母版的 D：同结构 / 同长度分布 / 同歧义去括号，叶子为字母、无算术。
+    因无数值约束，不存在不可行样本 -> 记录数 == base（与 A/B 同量，不像 D 因
+    数值约束损失 ~6%）。评测走结构性接受（按 infix 聚合的 alt），不依赖 answer。
+    """
+    # 1) 按字母压平串分组（含算符，如 "a+b-c"），保证同 infix 的多解姊妹树同 gid
+    groups = defaultdict(list)
+    for s in samples:
+        gq = infix_reduced(s['tree'], ambiguous=True)
+        groups[(s['n'], gq)].append(s)
+
+    result = []
+    multi = 0
+    total = len(groups)
+    for gi, ((n, gq), grp) in enumerate(groups.items()):
+        if gi % 1000 == 0:
+            print(f"    Processing group {gi}/{total}...")
+        if len(grp) > 1:
+            multi += 1
+        # 2) 每棵树各出一条记录：同 infix（字母），不同 pre/post/stack（结构不同）
+        for s in grp:
+            t = s['tree']
+            q = infix_reduced(t, ambiguous=True)
+            result.append({
+                'n': n,
+                'ops': ops_of_tree(t),
+                'gid': gi,
+                'tree': infix_full(t),
+                'infix': q,
+                'prefix': prefix(t),
+                'postfix': postfix(t),
+                'stack': stack_eval_sym(t),
+                'prec_switch': count_prec_switch(q),
+                'Ic': s['ic'],
+                'bk': s['bk'],
+                'sp': ''
+            })
+
+    print(f"    Groups: {total} | multi-solution: {multi}")
+    split_by_q(result, rng)
+    return result
+
+
+def make_dataset_d(samples, rng):
+    """Dataset D: numbers, rules #1-#5, multi-solution groups keyed by flat Q.
+
+    数字版的 C（C 的字母形式之反面）：同结构 / 同长度分布 / 同歧义去括号，
+    但填真实数字并求值，按 ANS 评估。填数前先按「字母压平串」分组（中缀压平
+    保持叶子从左到右顺序），同组树共用一套数字 -> Q 相同、ANS 由结合律恒等
+    -> split_by_q 真正生效。生成策略：回溯生成器喂组内约束最严的主树，再用
+    同一套数字校验组内其余树。
     """
     # 1) 按字母压平串分组（含算符，如 "a+b-c"）
     groups = defaultdict(list)
@@ -753,19 +805,23 @@ def make_dataset_c(samples, rng):
 
 # ============================ Statistics ============================
 
-def compute_stats(samples, ds_a, ds_b, ds_c):
+def compute_stats(samples, ds_a, ds_b, ds_c, ds_d):
     stats = {
         'total_base': len(samples),
         'dataset_A': len(ds_a),
         'dataset_B': len(ds_b),
         'dataset_C': len(ds_c),
+        'dataset_D': len(ds_d),
         'by_n': {},
         'by_n_C': {},
+        'by_n_D': {},
         'by_bucket': {},
         'split_A': {},
         'split_C': {},
+        'split_D': {},
         'bucket_0_test_A': 0,
         'unique_Q_C': 0,
+        'unique_Q_D': 0,
     }
     for s in samples:
         n = str(s['n'])
@@ -781,8 +837,15 @@ def compute_stats(samples, ds_a, ds_b, ds_c):
         stats['split_C'][sp] = stats['split_C'].get(sp, 0) + 1
         nc = str(d['n'])
         stats['by_n_C'][nc] = stats['by_n_C'].get(nc, 0) + 1
+    for d in ds_d:
+        sp = d['sp']
+        stats['split_D'][sp] = stats['split_D'].get(sp, 0) + 1
+        nd = str(d['n'])
+        stats['by_n_D'][nd] = stats['by_n_D'].get(nd, 0) + 1
     stats['unique_Q_C'] = len(set(d['infix'] for d in ds_c))
     stats['multi_solution_samples_C'] = len(ds_c) - stats['unique_Q_C']
+    stats['unique_Q_D'] = len(set(d['infix'] for d in ds_d))
+    stats['multi_solution_samples_D'] = len(ds_d) - stats['unique_Q_D']
     return stats
 
 # ============================ Save ============================
@@ -850,20 +913,22 @@ def main():
     save_jsonl(ds_b, f'{OUT_DIR}/dataset_B.jsonl')
     print(f"  Saved {len(ds_b)} samples -> dataset_B.jsonl")
 
-    print("\n[4/5] Dataset C: numbers, rules #1-#5, Q-grouped...")
-    rng2 = random.Random(SEED + 1)
-    ds_c = make_dataset_c(samples, rng2)
+    print("\n[4/5] Dataset C: letters, rules #1-#5 (ambiguous), Q-grouped...")
+    rng_c = random.Random(SEED + 2)
+    ds_c = make_dataset_c(samples, rng_c)
     save_jsonl(ds_c, f'{OUT_DIR}/dataset_C.jsonl')
     print(f"  Saved {len(ds_c)} samples -> dataset_C.jsonl")
 
-    print("\n[5/5] Dataset D: same as C (length distribution applied)...")
-    save_jsonl(ds_c, f'{OUT_DIR}/dataset_D.jsonl')
-    print(f"  Saved {len(ds_c)} samples -> dataset_D.jsonl")
+    print("\n[5/5] Dataset D: numbers, rules #1-#5 (ambiguous), Q-grouped, multi-solution, ANS...")
+    rng_d = random.Random(SEED + 1)
+    ds_d = make_dataset_d(samples, rng_d)
+    save_jsonl(ds_d, f'{OUT_DIR}/dataset_D.jsonl')
+    print(f"  Saved {len(ds_d)} samples -> dataset_D.jsonl")
 
     print("\n" + "=" * 60)
     print("Statistics")
     print("=" * 60)
-    stats = compute_stats(samples, ds_a, ds_b, ds_c)
+    stats = compute_stats(samples, ds_a, ds_b, ds_c, ds_d)
     save_json(stats, f'{OUT_DIR}/stats.json')
     print(json.dumps(stats, indent=2, ensure_ascii=False))
 

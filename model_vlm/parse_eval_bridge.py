@@ -267,7 +267,7 @@ def _emit_vlm_cli(out_dir: Path, n_samples: int,
                   patch_w: int | None = None) -> None:
     """生成 VLM 三任务样本到 out_dir；n_samples<=0 表示全量。
 
-    流程：读 dataset_C → bridge.align 注解 → build_instance 组装 IR →
+    流程：读 dataset_D → bridge.align 注解 → build_instance 组装 IR →
     emit_vlm_samples 投影三任务。对齐在底层 bridge 完成，本函数只做编排。
 
     n_samples != 0（抽样）：图片输出 PNG（out_dir/images）；n_samples <= 0（全量）：
@@ -276,7 +276,7 @@ def _emit_vlm_cli(out_dir: Path, n_samples: int,
     import json
 
     dataset_path = dataset_path or (Path(__file__).resolve().parent.parent
-                                    / 'parse' / 'dataset' / 'dataset_C.jsonl')
+                                    / 'parse' / 'dataset' / 'dataset_D.jsonl')
     if not dataset_path.exists():
         print(f"[skip] 数据集不存在: {dataset_path}")
         return
@@ -365,7 +365,7 @@ if __name__ == '__main__':
     ap.add_argument('--vlm-out-dir', type=Path, default="model_vlm/data",
                     help='生成 VLM 三任务样本到此目录')
     ap.add_argument('--dataset', type=Path, default=None,
-                    help='dataset_C 路径（默认 parse/dataset/dataset_C.jsonl）')
+                    help='dataset_D 路径（默认 parse/dataset/dataset_D.jsonl）')
     ap.add_argument('--reuse-images', action='store_true',
                     help='已存在的图片跳过重渲染（仅改标签格式重生成时用）')
     ap.add_argument('--render', default="minimal",

@@ -372,23 +372,24 @@ def _ans_digits(ans: int) -> int:
 def _generate_dataset(m, paths, seed: int = 0) -> None:
     """从 source 投影 dataset 类型 trial 数据（按 config 划分，按 Q 分组防泄漏）。
 
-    dataset 源（如 dataset_C.jsonl）是原始 IR（infix/prefix/postfix/answer/gid…，已固化 prec_switch/
+    dataset 源（如 dataset_D.jsonl）是原始 IR（infix/prefix/postfix/answer/gid…，已固化 prec_switch/
     ans_digits 两个单记录难度元数据；alt 不在此固化，因它跨记录且按记法派生）。它不是直接
     可训练的 {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标
     记法 + '#'，纯结构转换、不求值）；并补齐 bucket_report 需要的字段。
+    （数字集 dataset_D.jsonl 带 answer；字母集 dataset_C.jsonl 不带 answer，评测走结构性接受。）
 
     分流（P0b 修复）：不再信任源文件写死的 sp 字段（那由上游生成器按固定 0.8 写死、绕过
     experiment 配置），改由本实验的 split（Material.split，默认 0.2 = 20% 测试，与历史一致）
     + seed（experiment.data_seed，经 generate_trial 传入）按 Q 分组确定性划分——同一 Q 的
     所有记录（含多解姊妹树）整体进 train 或 test，杜绝多解泄漏；且与 expr/bead 型用同一 seed
     做确定性分流，复现性语义统一。改 dataset 的 split / data_seed 立即生效、无需重生成上游
-    dataset_C。
+    dataset_D。
 
       - alt         ：同 infix 的多解集合（'|' 分隔的目标记法串）。按 infix 聚合源里同一 infix 的
-                      所有合法解（dataset_C 靠 gid 标识多解组，但按 infix 聚合更通用：同 infix
+                      所有合法解（dataset_D 靠 gid 标识多解组，但按 infix 聚合更通用：同 infix
                       必对应同一解集合）。缺失时退化为空（bucket_report 退化为严格串等）。
       - prec_switch ：从 infix 现算（源若自带则优先，兼容旧/手工格式）。
-      - ans_digits  ：从 answer 现算（源若自带则优先）。
+      - ans_digits  ：从 answer 现算（源若自带则优先；字母集无 answer，置 0）。
 
     注意：alt 必须在此按 infix 聚合派生（跨记录 + 分记法，上游固化会冗余且耦合记法）；
     prec_switch/ans_digits 已由 dataset_generator 在生成阶段固化，下游优先透传
@@ -435,7 +436,9 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
                 'bk': record.get('bk', 0),
                 'alt': alt,
                 'prec_switch': record.get('prec_switch', _count_prec_switch(inst.infix)),
-                'ans_digits': record.get('ans_digits', _ans_digits(inst.answer)),
+                # ans_digits 仅在源带 answer 时有意义（数字集）；字母集无 answer -> 置 0
+                'ans_digits': record.get('ans_digits',
+                                        _ans_digits(inst.answer) if inst.answer else 0),
             }
             out_line = json.dumps(
                 {"category": record.get('ops', ''), "Q": q, "A": a, **struct},
