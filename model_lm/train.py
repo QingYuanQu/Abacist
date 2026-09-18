@@ -39,7 +39,7 @@ def train(device,
           best_val_acc=-1.0,
           count=0,
           acc_mode="acc") -> Record | None:
-    """训练单课，每 epoch 构造完整 Record 写入 jsonl 日志。
+    """训练单 trial，每 epoch 构造完整 Record 写入 jsonl 日志。
 
     验证集 = 测试集，每 epoch 做完整评估；按 acc_mode 主指标判优，
     最优时保存权重并留存 best_record。

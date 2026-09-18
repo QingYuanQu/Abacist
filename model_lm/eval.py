@@ -1,6 +1,6 @@
-"""通用 LM 评估能力（与课程无关）。
+"""通用 LM 评估能力（与实验无关）。
 
-课程相关的单课评估（依赖 experiment/trial 聚合对象）见 experiment/trial/eval.py。
+实验相关的单 trial 评估（依赖 experiment/trial 聚合对象）见 experiment/trial/eval.py。
 """
 import json
 
@@ -190,15 +190,23 @@ def _verify_generate_batch(model, device, stoi, itos, tokenizer,
 
     print(f"  [PASS] {len(sample_prompts)} 条全部一致 [OK]")
 
-def load_test_dataset(test_data_path):
-    """读取 JSONL 测试集，返回 (prompts, expected, total)。
+def _strip_stop(s: str) -> str:
+    """去掉停止符 '#'（生成到 max_len 停止时没有）；与 bucket_report 口径一致。"""
+    s = s.rstrip()
+    return s[:-1] if s.endswith('#') else s
 
-    每行要求含 'Q'（prompt）与 'A'（期望答案）字段。
-    文件缺失或为空均由调用方 guard（此处假设路径已校验存在且内容可信）。
+
+def load_test_dataset(test_data_path):
+    """读取 JSONL 测试集，返回 (prompts, expected, alts, total)。
+
+    每行要求含 'Q'（prompt）与 'A'（期望答案）字段；可选含 'alt'
+    （该 Q 的全部合法后序解，用 '|' 分隔）——用于一题多解的结构等价判定。
+    alts[i] 为 set[str]；样本缺 'alt' 时为 None（退回严格串等）。
 
     Returns:
         prompts (list[str]): 各样本 prompt
         expected (list[str]): 各样本期望答案
+        alts (list[set[str] | None]): 各样本合法解集合（去停止符的规范形）
         total (int): 样本总数
     """
     raw_data = []
@@ -208,7 +216,14 @@ def load_test_dataset(test_data_path):
                 raw_data.append(json.loads(line.strip()))
     prompts = [item['Q'] for item in raw_data]
     expected = [item['A'] for item in raw_data]
-    return prompts, expected, len(raw_data)
+    alts = []
+    for item in raw_data:
+        alt_raw = item.get('alt')
+        if alt_raw:
+            alts.append({_strip_stop(a.strip()) for a in alt_raw.split('|') if a.strip()})
+        else:
+            alts.append(None)
+    return prompts, expected, alts, len(raw_data)
 
 
 def _extract_ans(text: str) -> str | None:
@@ -241,16 +256,16 @@ def _extract_think(text: str) -> str | None:
 @torch.no_grad()
 def compute_accuracy(model, device, vocab_data, eval_batch_size, pad_id,
                      prompts=None, expected=None, test_data_path=None,
-                     max_seq_len=None, stop_token=None):
+                     alts=None, max_seq_len=None, stop_token=None):
     """分块批量推理，统计准确率并返回完整预测列表。
 
     tokenizer 构建、stop_token 解析（统一走词表 metadata，缺失报错）、
-    分块 generate_batch、计数都在此完成，训练验证与课末评测共用。
+    分块 generate_batch、计数都在此完成，训练验证与 trial 末评测共用。
 
     同时计算三种口径的准确率：
-      - acc（整串对比，pred == exp）
-      - acc_ans（只比 ANS 答案本体）
-      - acc_think（只比思考过程，ANS 之前部分）
+      - acc（整串对比；若样本带 alt，改为结构等价：去停止符后的 pred ∈ alt 集合，否则 pred == exp）
+      - acc_ans（只比 ANS 答案本体，始终严格）
+      - acc_think（只比思考过程，ANS 之前部分，始终严格）
 
     Args:
         model: GPT 模型
@@ -269,7 +284,7 @@ def compute_accuracy(model, device, vocab_data, eval_batch_size, pad_id,
         predictions: 与 prompts 等长的完整预测字符串列表
     """
     if test_data_path is not None:
-        prompts, expected, _ = load_test_dataset(test_data_path)
+        prompts, expected, alts, _ = load_test_dataset(test_data_path)
     if max_seq_len is None:
         max_seq_len = vocab_data.max_seq_len
     if stop_token is None:
@@ -291,13 +306,18 @@ def compute_accuracy(model, device, vocab_data, eval_batch_size, pad_id,
         chunk_end = min(chunk_start + eval_batch_size, total)
         chunk_prompts = prompts[chunk_start:chunk_end]
         chunk_expected = expected[chunk_start:chunk_end]
+        chunk_alts = alts[chunk_start:chunk_end] if alts is not None else [None] * len(chunk_expected)
         preds = generate_batch(
             model, device, stoi, itos, tokenizer,
             chunk_prompts, max_seq_len, stop_ids, pad_id
         )
         predictions.extend(preds)
-        for pred, exp in zip(preds, chunk_expected):
-            if pred == exp:
+        for pred, exp, alt in zip(preds, chunk_expected, chunk_alts):
+            # acc：结构等价优先（alt 命中即正确），无 alt 退回严格串等
+            if alt is not None:
+                if _strip_stop(pred) in alt:
+                    correct += 1
+            elif pred == exp:
                 correct += 1
             pa, ea = _extract_ans(pred), _extract_ans(exp)
             if pa is not None and pa == ea:

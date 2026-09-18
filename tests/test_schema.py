@@ -97,7 +97,7 @@ def test_unknown_top_key_rejected():
 
 
 def test_experiment_level_key_in_trial_rejected():
-    """trial 里偷写 brain/train/eval → 报错（防止某课偷改 lr 导致不可比）。"""
+    """trial 里偷写 brain/train/eval → 报错（防止某 trial 偷改 lr 导致不可比）。"""
     raw = raw_experiment()
     raw["trials"][0]["lr"] = 0.1
     errs = errors_of(raw)

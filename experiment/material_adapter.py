@@ -117,7 +117,7 @@ def project_a(inst: ExpressionInstance, parse: str, eval_: str,
 def project_structure_a(inst, parse: str) -> str:
     """纯结构转换的 A 投影：目标记法序列 + '#'（无思考链标记、无 ANS 求值）。
 
-    用于 experiment 型 dataset 课程（前中后缀记法转换对比）——任务只学记法结构，
+    用于 experiment 型 dataset 实验（前中后缀记法转换对比）——任务只学记法结构，
     不学算术求值，故 A 就是目标记法序列本身：
       parse='pre'  → 前序序列 '#'（如 "+ + + 6 1 3 9#"）
       parse='post' → 后序序列 '#'（如 "6 1 3 9 + + +#"）
@@ -320,8 +320,8 @@ def _generate_bead(start, end, out_path, repeat, ops, allow_negative,
 
     def _lines(n):
         bead = num_to_bead_text(n, base)
-        # 与 expr 课的 project_a 对齐：答案统一用 "ANS <ans>#" 包裹，
-        # 使 acc_mode=acc_ans 对所有课一致生效（认算盘无思考链，ANS 前为空）。
+        # 与 expr 型 trial 的 project_a 对齐：答案统一用 "ANS <ans>#" 包裹，
+        # 使 acc_mode=acc_ans 对所有 trial 一致生效（认算盘无思考链，ANS 前为空）。
         return (json.dumps({"category": "盘面", "Q": str(n), "A": f"ANS {bead}#"},
                            ensure_ascii=False) + '\n',
                 json.dumps({"category": "珠态", "Q": bead, "A": f"ANS {n}#"},
@@ -349,42 +349,105 @@ def _generate_bead(start, end, out_path, repeat, ops, allow_negative,
         print(f"[珠态数据] 已生成 {count} 条 → {out_path}")
 
 
-def _generate_dataset(m, paths) -> None:
-    """从 source 投影 dataset 类型 trial 数据（流式写 train/test，按 sp 字段分流）。
+# dataset 投影用的运算符优先级（与 dataset_generator.PREC 同源，但本模块不 import 生成器）
+_PREC = {'+': 1, '-': 1, '×': 2, '÷': 2}
 
-    dataset 源（如 dataset_C.jsonl）是原始 IR（Q/pre/post/ANS/sp），不是可直接训练的
-    {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标记法
-    + '#'，纯结构转换、不求值）；steps 用空表即可（无需 align 注解）。
+
+def _count_prec_switch(q: str) -> int:
+    """Q 中相邻运算符优先级不同的次数（去括号后中缀的难度度量）。
+
+    提取 Q 的运算符序列（跳过数字/空格/括号），统计相邻优先级不同的相邻对。
+    例：'2+3×5'（+,×）→ 1；'2+3+5'（+,+）→ 0；'2+3×5-1'（+,×,-）→ 2。
+    与 bucket_report 的 PS_BANDS(0/1/2+) 对齐。
     """
+    ops = [c for c in q if c in _PREC]
+    return sum(1 for a, b in zip(ops, ops[1:]) if _PREC[a] != _PREC[b])
+
+
+def _ans_digits(ans: int) -> int:
+    """答案十进制位数（ANS 恒非负，abs 仅为防御）。"""
+    return len(str(abs(ans)))
+
+
+def _generate_dataset(m, paths, seed: int = 0) -> None:
+    """从 source 投影 dataset 类型 trial 数据（按 config 划分，按 Q 分组防泄漏）。
+
+    dataset 源（如 dataset_C.jsonl）是原始 IR（Q/pre/post/ANS/gid…，已固化 prec_switch/
+    ans_digits 两个单记录难度元数据；alt 不在此固化，因它跨记录且按记法派生）。它不是直接
+    可训练的 {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标
+    记法 + '#'，纯结构转换、不求值）；并补齐 bucket_report 需要的字段。
+
+    分流（P0b 修复）：不再信任源文件写死的 sp 字段（那由上游生成器按固定 0.8 写死、绕过
+    experiment 配置），改由本实验的 split（Material.split，默认 0.2 = 20% 测试，与历史一致）
+    + seed（experiment.data_seed，经 generate_trial 传入）按 Q 分组确定性划分——同一 Q 的
+    所有记录（含多解姊妹树）整体进 train 或 test，杜绝多解泄漏；且与 expr/bead 型用同一 seed
+    做确定性分流，复现性语义统一。改 dataset 的 split / data_seed 立即生效、无需重生成上游
+    dataset_C。
+
+      - alt         ：同 Q 的多解集合（'|' 分隔的目标记法串）。按 Q 聚合源里同一 Q 的
+                      所有合法解（dataset_C 靠 gid 标识多解组，但按 Q 聚合更通用：同 Q
+                      必对应同一解集合）。缺失时退化为空（bucket_report 退化为严格串等）。
+      - prec_switch ：从 Q 现算（源若自带则优先，兼容旧/手工格式）。
+      - ans_digits  ：从 ANS 现算（源若自带则优先）。
+
+    注意：alt 必须在此按 Q 聚合派生（跨记录 + 分记法，上游固化会冗余且耦合记法）；
+    prec_switch/ans_digits 已由 dataset_generator 在生成阶段固化，下游优先透传
+    （record.get(..., 现算)），仅 fallback 兼容旧格式/手工源。
+    """
+    proj_parse = m.parse if m.parse in ('pre', 'post') else 'post'
+    # 第一遍：全读源，按 Q 聚合多解 alt（目标记法）+ 收集唯一 Q 顺序
+    src_rows = []                              # (record, inst)
+    alt_by_q: dict[str, set[str]] = {}
+    q_keys: list[str] = []                      # 唯一 Q 首次出现顺序
+    with open(m.source, 'r', encoding='utf-8') as src:
+        for line in src:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            inst = build_instance(record, [])
+            src_rows.append((record, inst))
+            q = record['Q']
+            sol = project_structure_a(inst, proj_parse).rstrip('#')
+            alt_by_q.setdefault(q, set()).add(sol)
+            if q not in q_keys:
+                q_keys.append(q)
+
+    # 分流：每个 Q 组整体 train/test（防多解泄漏），由 split + seed 确定性决定
+    rng = random.Random(seed)
+    q_dest: dict[str, str] = {}
+    for q in sorted(q_keys):                    # sorted 保证与源顺序无关、只看 Q 集合
+        q_dest[q] = 'test' if rng.random() < m.split else 'train'
+
     train_f = open(paths.train_data, 'w', encoding='utf-8')
     test_f = open(paths.test_data, 'w', encoding='utf-8') if \
         (paths.test_data and paths.test_data != paths.train_data) else None
 
     train_count = test_count = 0
     try:
-        with open(m.source, 'r', encoding='utf-8') as src:
-            for line in src:
-                if not line.strip():
-                    continue
-                record = json.loads(line)
-                inst = build_instance(record, [])
-                q = project_q(inst, m.input_format)
-                a = project_structure_a(inst, m.parse)
-                # 透传结构字段（n/bk/prec_switch/ans_digits/alt）：dataset 源本就带这些
-                # 元数据，分桶评测（bucket_report）按它们出 n×bk 表，丢掉会令分桶失效。
-                # 训练只认 Q/A，多余键被忽略，故透传安全。
-                struct = {k: record[k] for k in
-                          ('n', 'bk', 'prec_switch', 'ans_digits', 'alt')
-                          if k in record}
-                out_line = json.dumps(
-                    {"category": record.get('ops', ''), "Q": q, "A": a, **struct},
-                    ensure_ascii=False) + '\n'
-                if test_f is not None and record.get('sp') == 'test':
-                    test_f.write(out_line)
-                    test_count += 1
-                else:
-                    train_f.write(out_line)
-                    train_count += 1
+        for record, inst in src_rows:
+            q = project_q(inst, m.input_format)
+            a = project_structure_a(inst, proj_parse)
+
+            # alt：优先用源自带；否则按 Q 聚合（真实 dataset_C 走此路）
+            alt = record.get('alt') or '|'.join(sorted(alt_by_q.get(record['Q'], set())))
+            struct = {
+                'n': record.get('n'),
+                'bk': record.get('bk', 0),
+                'alt': alt,
+                'prec_switch': record.get('prec_switch', _count_prec_switch(record['Q'])),
+                'ans_digits': record.get('ans_digits', _ans_digits(record['ANS'])),
+            }
+            out_line = json.dumps(
+                {"category": record.get('ops', ''), "Q": q, "A": a, **struct},
+                ensure_ascii=False) + '\n'
+
+            dest = q_dest[record['Q']]
+            if test_f is not None and dest == 'test':
+                test_f.write(out_line)
+                test_count += 1
+            else:
+                train_f.write(out_line)
+                train_count += 1
     finally:
         train_f.close()
         if test_f:
@@ -407,6 +470,6 @@ def generate_trial(cfg, seed) -> None:
                        m.allow_negative, m.sample, paths.test_data, m.split,
                        seed, base=m.abacus_base)
     elif m.type == 'dataset':
-        _generate_dataset(m, paths)
+        _generate_dataset(m, paths, seed)
     else:
         raise ValueError(f"未知 material.type: {m.type!r}（env 类型已删除）")

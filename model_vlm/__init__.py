@@ -10,7 +10,7 @@
                    （train_vlm.build_vocab），本文件暂无调用者。
 
 通用依赖在 `model/`：`model/vocab.py`（通用词表库）与 `model/vision.py`
-（VisionEncoder）被本子系统与主线课程训练（`python -m exp`）共用。
+（VisionEncoder）被本子系统与主线实验训练（`python -m experiment`）共用。
 
 运行：
   python -m model_vlm.train_vlm --jsonl ... --image-dir ... --out ...

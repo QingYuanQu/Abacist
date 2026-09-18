@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """experiment/bucket_report.py —— 分桶评测报告（分析工具，不参与训练主链路）。
 
-职责：加载已训练的单课模型，在测试集上批量推理，按**结构等价**判定正确性，
+职责：加载已训练的单 trial 模型，在测试集上批量推理，按**结构等价**判定正确性，
 并按 n × bk / prec_switch / ans_digits 分桶出报告。
 
 为什么需要独立脚本：
@@ -160,7 +160,7 @@ def _one_dim(res: list[dict], key, label: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="分桶评测报告（结构等价 + n×bk）")
     ap.add_argument("--experiments", required=True, help="逗号分隔的 exp 名")
-    ap.add_argument("--trial", type=int, default=None, help="只评第 N 课（默认全部）")
+    ap.add_argument("--trial", type=int, default=None, help="只评第 N 个 trial（默认全部）")
     ap.add_argument("--batch-size", type=int, default=1024)
     ap.add_argument("--csv", default=None, help="额外输出长表 CSV")
     args = ap.parse_args()

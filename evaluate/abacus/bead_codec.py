@@ -9,7 +9,7 @@
   - L = 靠梁下珠颗数（每颗 ×1），U = 靠梁上珠颗数（每颗 ×5）
   - 紧凑形式默认裁剪前导空档，0 仅一档 [空]
 
-消费方：datagen/gen_bead.py（课程珠态课）、model_vm/gen.py（看图读珠态）。
+消费方：datagen/gen_bead.py（珠态 trial）、model_vm/gen.py（看图读珠态）。
 文本编码函数与旧实现逐字节兼容（doctest 与旧版一致）。
 """
 

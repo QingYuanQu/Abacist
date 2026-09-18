@@ -6,16 +6,16 @@ from experiment.trial.eval import eval_one_trial
 from config import Experiment, ExecutionContext, Record
 from experiment.trial.trial_train import train_one_trial
 
-# ==================== 单课训练+评估循环 ====================
+# ==================== 单 trial 训练+评估循环 ====================
 def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> tuple[Record, bool]:
-    """对单课执行训练和评估。
+    """对单个 trial 执行训练和评估。
 
     验证集 = 测试集，训练中每 epoch 已做完整评估，
     最优 Record 的成绩即最终成绩，无需训练后重复评估。
 
     Args:
-        trial_id: 课程序号（experiment.trials 下标）
-        exp: 学习单元聚合根（含 trials/policy/train/eval/brain）
+        trial_id: trial 序号（experiment.trials 下标）
+        exp: 实验聚合根（含 trials/train/eval/brain）
         ctx: 运行时上下文（vocab_data/device/prev_model_path/review_files/seed）
     Returns:
         (best_record, passed): 最优 epoch 的 Record 与通过判定
@@ -30,13 +30,13 @@ def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) 
     tag = "[实验]"
 
     print(f"\n{'=' * 60}")
-    print(f"{tag} 开始学习第{trial_id}课: {trial_name}")
+    print(f"{tag} 开始训练第{trial_id}个 trial: {trial_name}")
     print(f"{tag}   训练参数: epochs={method.epochs}, lr={method.learning_rate}, "
           f"batch={method.batch_size}, repeat_factor={method.repeat_factor}")
     print(f"{tag}   通过阈值: {pass_threshold*100:.0f}%")
     print(f"{'=' * 60}")
 
-    # ---- 零样本迁移评估：用上一课权重直接解当前课测试题 ----
+    # ---- 零样本迁移评估：用上一 trial 权重直接解当前 trial 测试题 ----
     if ctx.prev_model_path and os.path.isfile(ctx.prev_model_path):
         torch.cuda.empty_cache()
         zs_acc, _, _, _, _, _, _ = eval_one_trial(trial_id,
@@ -52,7 +52,7 @@ def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) 
 
     # 兜底：无验证 或 训练被跳过（断点续训已完成）时，完整评估一次构造 Record
     if best_record is None:
-        print(f"\n{tag} 评估第{trial_id}课...")
+        print(f"\n{tag} 评估第{trial_id}个 trial...")
         acc, acc_ans, acc_think, correct, correct_ans, correct_think, total = eval_one_trial(
             trial_id, exp, ctx, model_path=model_path, verbose=False)
         best_record = Record(
@@ -70,10 +70,10 @@ def train_and_eval_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) 
 
     passed = primary_acc >= pass_threshold
     if passed:
-        print(f"{tag} [PASS] 第{trial_id}课 {trial_name} 通过！(主指标 {acc_mode}={primary_acc*100:.2f}%"
+        print(f"{tag} [PASS] 第{trial_id}个 trial {trial_name} 通过！(主指标 {acc_mode}={primary_acc*100:.2f}%"
               f"@epoch {best_record.epoch})")
     else:
-        print(f"{tag} [FAIL] 第{trial_id}课 {trial_name} 未达标（{primary_acc*100:.2f}% < {pass_threshold*100:.0f}%"
+        print(f"{tag} [FAIL] 第{trial_id}个 trial {trial_name} 未达标（{primary_acc*100:.2f}% < {pass_threshold*100:.0f}%"
               f"@epoch {best_record.epoch}）")
 
     return best_record, passed

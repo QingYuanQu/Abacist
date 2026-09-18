@@ -6,7 +6,7 @@
 原 `experiment/studies/PATTERN_in2post/visualize.py` 与
 `PATTERN_in2pre/visualize.py` 是**逐字节相同**的两份拷贝，且各自硬编码了：
   - `HIDDEN = 64`（从 brain.json 抄来的常量）
-  - "全部 15 课"（实际 19 课，早已过期）
+  - "全部 15 个 trial"（实际 19 个，早已过期）
   - 数据来源 `material.csv` + `config/head_patterns.json`（两者均已随配置迁移删除）
 同一份分析代码复制到每个实验目录，既会各自腐化，也让配置改动同时打断多处。
 故收敛为单一入口，元信息一律**从 config.yaml 经 loader 读取**（唯一事实来源）。

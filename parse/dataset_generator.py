@@ -281,6 +281,17 @@ def infix_reduced(t, p_op=None, is_left=None, ambiguous=False):
         return inner
     return f"({inner})"
 
+
+def count_prec_switch(q):
+    """Q 中相邻运算符优先级不同的次数（去括号中缀难度度量）。
+
+    提取 q 的运算符序列（跳过数字/空格/括号），统计相邻优先级不同的相邻对。
+    例：'2+3×5'（+,×）→ 1；'2+3+5'（+,+）→ 0。
+    与 experiment/material_adapter._count_prec_switch 同源（均基于 PREC）。"""
+    ops = [c for c in q if c in PREC]
+    return sum(1 for a, b in zip(ops, ops[1:]) if PREC[a] != PREC[b])
+
+
 # ============================ Evaluation ============================
 
 def evaluate(t, vals):
@@ -724,6 +735,8 @@ def make_dataset_c(samples, rng):
                 'post': postfix(nt),
                 'stack': stack_eval_num(nt),
                 'ANS': ans,
+                'prec_switch': count_prec_switch(q),
+                'ans_digits': len(str(abs(ans))),
                 'Ic': s['ic'],
                 'bk': s['bk'],
                 'sp': ''

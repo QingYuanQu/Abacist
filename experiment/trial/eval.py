@@ -1,4 +1,4 @@
-"""单课评估 + 单课 CLI（课程编排层，2026-09-04 从 model_lm/eval.py 迁出）。
+"""单 trial 评估 + 单 trial CLI（实验编排层，2026-09-04 从 model_lm/eval.py 迁出）。
 
 迁出原因：eval_one_trial 依赖 experiment/trial 聚合对象（exp.trials[].paths/material、
 exp.brain/pos_emb/eval、ReportTable 报告回写），属于实验编排而非通用 LM 能力；
@@ -21,6 +21,7 @@ from model.config import ModelConfig
 from model import GPT
 from model.vocab import load_vocab
 from model_lm.eval import (          # 通用 LM 能力（含内部自检 _verify_generate_batch）
+    _strip_stop,
     _verify_generate_batch,
     chat,
     compute_accuracy,
@@ -29,7 +30,7 @@ from model_lm.eval import (          # 通用 LM 能力（含内部自检 _verif
 
 
 def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
-    """评估单课测试集，返回三种口径准确率与计数。
+    """评估单个 trial 测试集，返回三种口径准确率与计数。
 
     Args:
         trial_id: trial 序号（exp.trials 下标）
@@ -77,7 +78,14 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
         print(f"[评估] 测试数据不存在: {test_data_path}")
         return 0.0, 0.0, 0.0, 0, 0, 0, 0
 
-    prompts, expected, total = load_test_dataset(test_data_path)
+    prompts, expected, alts, total = load_test_dataset(test_data_path)
+
+    def _is_struct_correct(pred, exp, alt):
+        """与 compute_accuracy 的 acc 判定口径一致：alt 命中即正确，否则严格串等。"""
+        if alt is not None:
+            return _strip_stop(pred) in alt
+        return pred == exp
+
     if total == 0:
         print(f"[评估] 测试集为空: {test_data_path}")
         return 0.0, 0.0, 0.0, 0, 0, 0, 0
@@ -106,7 +114,7 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
     # ---- 分块批量推理（共用 compute_accuracy，返回完整 predictions） ----
     accuracy, acc_ans, acc_think, correct, correct_ans, correct_think, total, predictions = compute_accuracy(
         model, device, vocab_data, eval_batch_size, pad_id,
-        prompts=prompts, expected=expected,
+        prompts=prompts, expected=expected, alts=alts,
         max_seq_len=max_seq_len, stop_token=stop_token
     )
     print_interval = eval_config.print_interval
@@ -115,14 +123,14 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
     if is_small:
         for i, (pred, exp) in enumerate(zip(predictions, expected)):
             idx = i + 1
-            is_correct = pred == exp
+            is_correct = _is_struct_correct(pred, exp, alts[i])
             status = "✅" if is_correct else "❌"
             print(f"[{idx}/{total}] {status}  \tQ: {prompts[i]}", end="\t")
             print(f"期望: {exp}\t预测: {pred}\t累计准确率: {correct/idx*100:.2f}%")
     else:
         for i, (pred, exp) in enumerate(zip(predictions, expected)):
             idx = i + 1
-            is_correct = pred == exp
+            is_correct = _is_struct_correct(pred, exp, alts[i])
             if verbose and (idx % print_interval == 0 or idx == total):
                 status = "✅" if is_correct else "❌"
                 pred_flat = pred.replace("\n", " ")
@@ -144,19 +152,19 @@ def eval_one_trial(trial_id: int, exp, ctx, model_path=None, verbose=True):
     return accuracy, acc_ans, acc_think, correct, correct_ans, correct_think, total
 
 
-# ---------- 主程序（单课评估 CLI） ----------
+# ---------- 主程序（单 trial 评估 CLI） ----------
 def main():
     parser = argparse.ArgumentParser(description="Abacist 评估")
     parser.add_argument("--experiment", type=str, default="default",
-                        help="学习单元名称（对应 experiment/studies/<name>/ 目录）")
+                        help="实验名称（对应 experiment/studies/<name>/ 目录）")
     parser.add_argument("--trial", type=int, default=0,
-                        help="指定第 N 课的模型")
+                        help="指定第 N 个 trial 的模型")
     parser.add_argument("--model", type=str, default=None,
-                        help="单课模式：指定模型权重路径（覆盖 SAVE['model_path']）")
+                        help="单 trial 模式：指定模型权重路径（覆盖 SAVE['model_path']）")
     parser.add_argument("--batch", action="store_true",
-                        help="批量评估模式：对指定课测试集做批量推理并统计准确率")
+                        help="批量评估模式：对指定 trial 测试集做批量推理并统计准确率")
     parser.add_argument("--chat", action="store_true",
-                        help="聊天模式：加载指定课模型后交互式生成")
+                        help="聊天模式：加载指定 trial 模型后交互式生成")
 
     args = parser.parse_args()
 

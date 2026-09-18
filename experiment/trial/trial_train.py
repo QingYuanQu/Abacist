@@ -23,13 +23,13 @@ def collate_fn(pad_id, batch):
         padded_batch.append(padded)
     return torch.stack(padded_batch)
 
-# -------------------- 单课训练函数（供 train_and_eval_trial 调用） --------------------
+# -------------------- 单 trial 训练函数（供 train_and_eval_trial 调用） --------------------
 def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "Record | None":
-    """单课训练。
+    """单 trial 训练。
 
     Args:
-        trial_id: 单课配置（material/method/artifacts）
-        exp: 学习单元聚合根（brain/train/eval/policy）
+        trial_id: trial 配置（material/method/artifacts）
+        exp: 实验聚合根（brain/train/eval）
         ctx: 运行时上下文（vocab_data/device/prev_model_path/review_files/epochs/seed）
     Returns:
         Record | None: 最优 epoch 的 Record；无验证或未训练任何 epoch 时为 None
@@ -93,12 +93,12 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
     # 确保 checkpoint 目录存在
     if ckpt_path:
         os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
-    # 1. 本课断点续训
+    # 1. 本 trial 断点续训
     if ckpt_path and os.path.isfile(ckpt_path):
         start_epoch, best_val_acc, no_improve = load_checkpoint(model, optimizer, ckpt_path, device)
-    # 2. 上一课续训
+    # 2. 上一 trial 续训
     elif prev_model_path and os.path.isfile(prev_model_path):
-        print(f"[训练] 从上一课权重初始化: {prev_model_path}")
+        print(f"[训练] 从上一 trial 权重初始化: {prev_model_path}")
         prev_state = torch.load(prev_model_path, map_location=device)
         prev_vocab_size = prev_state.get('token_emb.weight', prev_state.get('head.weight')).shape[0]
         if prev_vocab_size != vocab_size:

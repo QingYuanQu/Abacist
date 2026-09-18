@@ -10,6 +10,20 @@ PAD_TOKEN = "<PAD>"   # 全局常量，方便其他模块引用
 STOP_TOKEN = "#"        # 停止 token，所有词表统一使用
 
 
+def _rel(path: str, project_root: str | None) -> str:
+    """把路径归一到相对 project_root 的形式；project_root 为空或跨盘则原样返回。
+
+    vocab 元数据只存相对路径，避免把机器/工作目录相关的绝对路径写死进 JSON
+    （否则项目移动或改名如 study→experiment 后，缓存键失效且文件不可移植）。
+    """
+    if project_root:
+        try:
+            return os.path.relpath(path, project_root)
+        except ValueError:
+            return path
+    return path
+
+
 def build_vocab_from_file(file_path, tokenizer_pattern=None):
     if tokenizer_pattern is None:
         tokenizer_pattern = r'<think>|</think>|#|INFIX|PRE|POST|STACK|ANS|.'
@@ -58,7 +72,7 @@ def build_vocab_from_files(file_paths, tokenizer_pattern=None):
     return sorted(list(all_vocab)), max_seq_len
 
 
-def save_vocab(vocab, output_path, source_file, max_seq_len, config_hash):
+def save_vocab(vocab, output_path, source_file, max_seq_len, config_hash, project_root=None):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -84,8 +98,8 @@ def save_vocab(vocab, output_path, source_file, max_seq_len, config_hash):
         "itos": itos,
         "pad_id": stoi[PAD_TOKEN],
         "metadata": {
-            "source_file": source_file,
-            "source_mtime": source_mtime,
+        "source_file": _rel(source_file, project_root) if source_file else None,
+        "source_mtime": source_mtime,
             "config_hash": config_hash,
             "max_seq_len": max_seq_len,
             "stop_token": STOP_TOKEN,
@@ -168,8 +182,11 @@ class Vocab:
 
 
 
-def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash):
-    """保存词表（多文件版本），与 save_vocab 兼容。"""
+def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash, project_root=None):
+    """保存词表（多文件版本），与 save_vocab 兼容。
+
+    源文件路径只存相对 project_root 的形式，避免绝对路径写死进 JSON。
+    """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -182,11 +199,10 @@ def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash)
     stoi = {tok: i for i, tok in enumerate(sorted_vocab)}
     itos = {str(i): tok for i, tok in enumerate(sorted_vocab)}
 
-    # 记录每个源文件的 mtime，用于缓存检查
-    source_mtimes = {}
-    for fp in source_files:
-        if os.path.isfile(fp):
-            source_mtimes[fp] = os.path.getmtime(fp)
+    # 只存相对 project_root 的源文件路径 + mtime，用于缓存检查（不写绝对路径）
+    rel_files = [_rel(fp, project_root) for fp in source_files]
+    source_mtimes = {_rel(fp, project_root): os.path.getmtime(fp)
+                     for fp in source_files if os.path.isfile(fp)}
 
     vocab_data = {
         "vocab": sorted_vocab,
@@ -195,7 +211,7 @@ def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash)
         "itos": itos,
         "pad_id": stoi[PAD_TOKEN],
         "metadata": {
-            "source_files": source_files,
+            "source_files": rel_files,
             "source_mtimes": source_mtimes,
             "config_hash": config_hash,
             "max_seq_len": max_seq_len,
@@ -211,8 +227,12 @@ def save_vocab_multi(vocab, output_path, source_files, max_seq_len, config_hash)
     if max_seq_len:
         print(f"最大序列长度: {max_seq_len}")
 
-def _build_vocab_with_cache(vocab_path, data_files):
-    """带缓存检查的词表构建，共享逻辑。"""
+def _build_vocab_with_cache(vocab_path, data_files, project_root=None):
+    """带缓存检查的词表构建，共享逻辑。
+
+    缓存校验以「相对 project_root 的源文件路径」为键，避免把绝对路径写死进 vocab；
+    项目移动 / 改名后旧 vocab 的键不匹配会自动触发重建。
+    """
     # 缓存检查
     if os.path.isfile(vocab_path):
         try:
@@ -221,11 +241,12 @@ def _build_vocab_with_cache(vocab_path, data_files):
             meta = existing.get('metadata', {})
             stored_files = meta.get('source_files', [])
             stored_mtimes = meta.get('source_mtimes', {})
-            if set(stored_files) == set(data_files):
+            rel_data = [_rel(f, project_root) for f in data_files]
+            if set(stored_files) == set(rel_data):
                 mtimes_match = True
-                for fp in data_files:
+                for fp, rel in zip(data_files, rel_data):
                     current_mtime = os.path.getmtime(fp) if os.path.isfile(fp) else None
-                    stored_mtime = stored_mtimes.get(fp)
+                    stored_mtime = stored_mtimes.get(rel)
                     if current_mtime is None or stored_mtime is None or abs(current_mtime - stored_mtime) > 1e-6:
                         mtimes_match = False
                         break
@@ -243,7 +264,8 @@ def _build_vocab_with_cache(vocab_path, data_files):
     save_vocab_multi(vocab_list, vocab_path,
                      source_files=data_files,
                      max_seq_len=max_seq_len,
-                     config_hash="curriculum")
+                     config_hash="curriculum",
+                     project_root=project_root)
 
     vocab_data = load_vocab(vocab_path)
     print(f"[实验词表] 就绪 | vocab_size={vocab_data.vocab_size} "
@@ -254,7 +276,7 @@ def _build_vocab_with_cache(vocab_path, data_files):
 def ensure_experiment_vocab(exp, trial_configs):
     """experiment 类型：按去重后的数据文件集合建一份共享词表。
 
-    experiment 的"独立"只指模型权重/训练每课独立，而非数据/词表独立——
+    experiment 的"独立"只指模型权重/训练每 trial 独立，而非数据/词表独立——
     数据共享时（同 source + 同投影参数 → 同 train/test 路径），词表也共享。
     因此对全部 trial 的数据文件去重后，建一份共享词表到 exp.vocab_path，
     返回 {trial_id: 同一 vocab_data}，保持调用方以 trial_id 取用的接口不变。
@@ -274,7 +296,7 @@ def ensure_experiment_vocab(exp, trial_configs):
     if not data_files:
         return {}
 
-    vocab_data = _build_vocab_with_cache(exp.vocab_path, data_files)
+    vocab_data = _build_vocab_with_cache(exp.vocab_path, data_files, project_root=exp.project_root)
     return {cfg.id: vocab_data for cfg in trial_configs}
 
 
