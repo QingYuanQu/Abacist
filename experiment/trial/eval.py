@@ -10,13 +10,11 @@ exp.brain/pos_emb/eval、ReportTable 报告回写），属于实验编排而非�
 """
 import argparse
 import os
-from datetime import datetime
 
 import torch
 
-from experiment.store import ReportTable
 from experiment.loader import load_experiment
-from config import ExecutionContext, Record
+from config import ExecutionContext
 from model.config import ModelConfig
 from model import GPT
 from model.vocab import load_vocab
@@ -223,19 +221,14 @@ def main():
         ctx = ExecutionContext(vocab_data=vocab_data, device=device)
         accuracy, acc_ans, acc_think, correct, correct_ans, correct_think, total = eval_one_trial(
             trial_id, exp=exp, ctx=ctx, model_path=model_path, verbose=True)
-        # 写回结果到 report.csv（独立评估无训练过程信息，仅记录评估字段）
+        # 独立评估只打印、不写回 report.csv：正式结果由完整 train+eval 运行写出
+        # （runner 路径），避免把配置改后的 what-if 重评分覆盖进正式结果表。
         acc_mode = exp.eval.acc_mode if exp.eval else "acc"
         primary_acc = {"acc": accuracy, "acc_ans": acc_ans, "acc_think": acc_think}.get(acc_mode, accuracy)
         pass_threshold = exp.eval.pass_threshold if exp.eval else 0.95
-        record = Record(
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            acc=accuracy, acc_ans=acc_ans, acc_think=acc_think,
-            correct=correct, correct_ans=correct_ans, correct_think=correct_think,
-            total=total,
-        )
-        ReportTable(exp.report_path).save_result(
-            trial_id, trial.name, record, primary_acc >= pass_threshold,
-            acc_mode, pass_threshold)
+        print(f"\n[评估] trial {trial_id} ({trial.name}) 独立评估："
+              f"{acc_mode}={primary_acc * 100:.2f}% (阈值 {pass_threshold:g}) "
+              f"-> {'通过' if primary_acc >= pass_threshold else '未通过'}")
         return
 
     # 两个入口都未指定时给出提示

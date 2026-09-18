@@ -3,13 +3,13 @@
 配置只有两个来源：`config.yaml`（唯一输入，见 experiment/schema.py）和磁盘产物。
 本模块只负责**结果**这一侧：每行 = 一个 trial 的最优 Record + 判定口径 + passed。
 
-行内保留 `name` 不只是为了人读——它是配置指纹：加载时若 `report.csv` 的 name 与
-config.yaml 对不上，说明 trials 被重排/改名/增删，此时旧结果不可复用，直接报错。
+写约定（路线 B / 单写方）：report.csv 只由"完整 train+eval"运行写出（runner 路径），
+每个 trial 一行、重复 save 整行覆盖，无非空合并。独立评估（eval.py）只打印、不持久化，
+避免把配置改后的 what-if 重评分覆盖进正式结果表。CSV 便于人直接观察（设计约定）。
 """
 
 import csv
 import os
-import tempfile
 
 from config import RECORD_FIELDS, Record
 
@@ -67,11 +67,7 @@ class ReportTable:
 
     def save_result(self, trial_id: int, trial_name: str, record: Record | None,
                     passed: bool, acc_mode: str, pass_threshold: float) -> None:
-        """写回单 trial 最优 Record 及判定口径（无则追加行）。
-
-        **非空合并**：空值代表"本次没有这方面的信息"，不得覆盖行内已有值。
-        否则 eval-only 的重跑（其 Record 无 train_loss/lr/时间）会把训练元信息抹掉。
-        """
+        """写回单 trial 最优 Record 及判定口径（无则追加行）。整行覆盖。"""
         row = {"id": str(trial_id), "name": trial_name,
                **(record.to_csv_row() if record is not None else {}),
                "acc_mode": acc_mode,
@@ -80,46 +76,34 @@ class ReportTable:
         rows = self.all()
         for r in rows:
             if (r.get("id") or "").strip() == str(trial_id):
-                for k, v in row.items():
-                    if v != "":
-                        r[k] = v
+                r.update(row)          # 整行覆盖：只由完整 train+eval 运行写出
                 break
         else:
             rows.append(row)
-        self._save(REPORT_COLS, rows)
+        self._write(rows)
 
     def clear_results(self, trial_ids=None) -> int:
         """清空结果列（保留 id/name 行）。trial_ids=None 表示全部。返回清除行数。"""
         keys = set(map(str, trial_ids)) if trial_ids else None
-        keep = {"id", "name"}
         rows = self.all()
         count = 0
         for r in rows:
             if keys is None or (r.get("id") or "").strip() in keys:
                 for c in REPORT_COLS:
-                    if c not in keep and c in r:
+                    if c not in ("id", "name"):
                         r[c] = ""
                 count += 1
         if count:
-            self._save(REPORT_COLS, rows)
+            self._write(rows)
         return count
 
     def write_header(self) -> None:
         """写入仅表头的空表。"""
-        self._save(REPORT_COLS, [])
+        self._write([])
 
-    def _save(self, fieldnames: list[str], rows: list[dict]) -> None:
-        """原子写入：临时文件 + os.replace。"""
+    def _write(self, rows: list[dict]) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        dirname = os.path.dirname(self.path) or "."
-        fd, tmp = tempfile.mkstemp(dir=dirname, suffix=".csv")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-                w.writeheader()
-                w.writerows(rows)
-            os.replace(tmp, self.path)
-        except Exception:
-            if os.path.isfile(tmp):
-                os.remove(tmp)
-            raise
+        with open(self.path, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=REPORT_COLS, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)

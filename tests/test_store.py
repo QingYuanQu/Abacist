@@ -1,8 +1,9 @@
-"""report.csv 读写 —— 身份指纹与非空合并语义。
+"""report.csv 读写 —— 身份指纹语义（路线 B / 单写方）。
 
-两条不变量都在修真实 bug：
-  1) 身份指纹：trials 被重排/改名后旧结果不可复用，必须报错而不是错位对上；
-  2) 非空合并：eval-only 重跑（Record 无 train_loss/lr/耗时）不得抹掉训练元信息。
+report.csv 仅由"完整 train+eval"运行写出（runner 路径），每个 trial 一行最优结果，
+重复 save 整行覆盖，无非空合并；eval-only 重跑只打印、不持久化。
+
+不变量：身份指纹——trials 被重排/改名后旧结果不可复用，必须报错而不是错位对上。
 """
 import csv
 import os
@@ -17,12 +18,6 @@ def full_record() -> Record:
     return Record(epoch=3, timestamp="2026-09-17 10:00:00", train_loss=0.5, lr=1e-3,
                   acc=0.25, acc_ans=0.0, acc_think=0.0, correct=5, correct_ans=0,
                   correct_think=0, total=20, epoch_time_s=1.5, elapsed_s=4.5)
-
-
-def partial_record() -> Record:
-    """只有评估结果、没有训练元信息（模拟 eval-only 重跑）。"""
-    return Record(epoch=3, timestamp="2026-09-17 11:00:00", acc=0.30,
-                  correct=6, total=20)
 
 
 def test_write_header_then_load_empty(tmp_path):
@@ -56,18 +51,26 @@ def test_partial_row_without_acc_is_not_a_result(tmp_path):
     assert record is None
 
 
-def test_non_empty_merge_keeps_training_meta(tmp_path):
+def test_save_result_overwrites_whole_row(tmp_path):
+    """路线 B：save_result 整行覆盖（无非空合并）。
+
+    单写方模型下 eval-only 不再持久化，故同一行只由完整 train+eval 运行写出；
+    重复 save 即覆盖，旧值被新值整体取代，且只占一行。
+    """
     table = ReportTable(str(tmp_path / "report.csv"))
     table.write_header()
     table.save_result(0, "a", full_record(), False, "acc", 0.95)
-    table.save_result(0, "a", partial_record(), True, "acc", 0.95)
+    table.save_result(0, "a",
+                      Record(epoch=3, timestamp="2026-09-17 11:00:00", train_loss=0.2, lr=5e-4,
+                             acc=0.30, acc_ans=0.0, acc_think=0.0, correct=6, correct_ans=0,
+                             correct_think=0, total=20, epoch_time_s=1.2, elapsed_s=3.0),
+                      True, "acc", 0.95)
 
     record, passed = table.load(["a"])[0]
     assert passed is True
     assert record.acc == pytest.approx(0.30)          # 新值覆盖
-    assert record.train_loss == pytest.approx(0.5)    # 旧训练元信息不被空值抹掉
-    assert record.lr == pytest.approx(1e-3)
-    assert record.epoch_time_s == pytest.approx(1.5)
+    assert record.train_loss == pytest.approx(0.2)    # 旧训练元信息被整体取代（无非空合并）
+    assert record.lr == pytest.approx(5e-4)
     assert len(table.all()) == 1                      # 追加而非新行
 
 
