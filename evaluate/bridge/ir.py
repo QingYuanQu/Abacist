@@ -57,21 +57,25 @@ class EvalStep:
 
 @dataclass
 class ExpressionInstance:
-    """IR 单行：一条表达式 = 元数据 + 纸笔层 + 算盘层。"""
+    """IR 单行：一条表达式 = 元数据 + 纸笔层 + 算盘层。
+
+    字段命名遵循 parse(ODS) 层约定：用语言学术语（infix/prefix/postfix/answer），
+    不含 chat 语义的 Q/A —— Q/A 是 experiment 投影层按任务赋予的角色
+    （如 infix=>postfix 任务时 Q=infix、A=postfix）。
+    """
     # —— 元数据 ——
     n: int                                   # 叶子数
     ops: str                                 # 运算符组合（树中序运算符序列，如 "+-"）
     ic: int                                  # Colless 不平衡度
     bk: int                                  # Colless 桶 0-9
     sp: str                                  # train / test
-    gid: int                                 # 多解组 id：去括号后同一 Q 的多棵树共享同一 gid
-    tree: str                                # 树结构签名（叶子=位置索引，审计/去重）
+    gid: int                                 # 多解组 id：去括号后同一 infix 的多棵树共享同一 gid
+    tree: str                                # 完整括号中缀串（字母树，审计/去重）
     # —— 纸笔层（parse 产出）——
-    Q: str                                   # 去括号中缀（模型实际输入）
-    pre: str                                 # 前序展示串
-    post: str                                # 后序展示串
-    postfix: list[str]                       # 后序 token 数组（结构化真源）
-    ANS: int                                 # 数学答案
+    infix: str                               # 去括号中缀（模型实际输入的问题表达式）
+    prefix: str                              # 前序展示串
+    postfix: str                             # 后序展示串
+    answer: int                              # 数学答案（数值；不可求值数据集 A/B 为 0）
     # —— 算盘层（eval 产出）——
     steps: list[EvalStep] = field(default_factory=list)
 
@@ -87,8 +91,13 @@ def build_instance(record: dict, steps: list[EvalStep],
 
     record: parse/dataset_generator 的一条记录。ops/tree/gid 优先取 record 内字段
     （阶段 2 起 parse 落盘已补全），缺失时回退：ops 从 postfix 推导，tree/gid 用占位。
+
+    字段键兼容：parse(ODS) 层已用 infix/prefix/postfix/answer；同时为兼容 expr 型
+    trial 的 _generate_expr（本次暂不改动）仍写 Q/pre/post/ANS，故此处两套键都认。
+    待 _generate_expr 迁移后移除旧键兼容分支。
     """
-    postfix = record["post"].split()
+    postfix_str = record.get("postfix", record.get("post", ""))
+    postfix = postfix_str.split()
     ops = record.get("ops") or "".join(t for t in postfix if t in "+-×÷")
     return ExpressionInstance(
         n=record["n"], ops=ops,
@@ -96,6 +105,9 @@ def build_instance(record: dict, steps: list[EvalStep],
         sp=record.get("sp", "train"),
         gid=record.get("gid", gid),
         tree=record.get("tree", tree),
-        Q=record["Q"], pre=record["pre"], post=record["post"],
-        postfix=postfix, ANS=record["ANS"], steps=steps,
+        infix=record.get("infix", record.get("Q", "")),
+        prefix=record.get("prefix", record.get("pre", "")),
+        postfix=postfix_str,
+        answer=record.get("answer", record.get("ANS", 0)),
+        steps=steps,
     )

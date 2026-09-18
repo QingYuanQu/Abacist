@@ -150,12 +150,12 @@ def emit_vlm_samples(inst: ExpressionInstance,
     samples.append({
         'task': 'parse',
         'idx': sample_idx,
-        'prompt': f"[PARSE] Q={inst.Q}",
-        'Q': inst.Q,
-        'PRE': inst.pre,
-        'POST': inst.post,
-        'ANS': inst.ANS,
-        'A': f"PRE{inst.pre};POST{inst.post}#",
+        'prompt': f"[PARSE] Q={inst.infix}",
+        'Q': inst.infix,
+        'PRE': inst.prefix,
+        'POST': inst.postfix,
+        'ANS': inst.answer,
+        'A': f"PRE{inst.prefix};POST{inst.postfix}#",
     })
 
     if abacus is None:
@@ -213,7 +213,7 @@ def emit_vlm_samples(inst: ExpressionInstance,
                     _save_png(sub_arr, sub_path)
                 sub_rel = sub_path.relative_to(image_dir).as_posix()
 
-            eval_prompt = (f"[EVAL] Q={inst.Q} POST={inst.post} "
+            eval_prompt = (f"[EVAL] Q={inst.infix} POST={inst.postfix} "
                            f"STACK={stack_before_str} "
                            f"CALC={step.a}{op_sym}{step.b} STEP={j}")
             samples.append({
@@ -221,8 +221,8 @@ def emit_vlm_samples(inst: ExpressionInstance,
                 'idx': sample_idx,
                 'step': calc_i,
                 'sub': j,
-                'Q': inst.Q,
-                'POST': inst.post,
+                'Q': inst.infix,
+                'POST': inst.postfix,
                 'prompt': eval_prompt,
                 'image': sub_rel,
                 'stack': stack_before_str,
@@ -322,8 +322,8 @@ def _emit_vlm_cli(out_dir: Path, n_samples: int,
     for i, line in enumerate(lines[:total]):
         rec = json.loads(line)
         # record → IR（底层 bridge 对齐注解）
-        steps, _ = bridge_align(rec['post'].split(), composer, abacus,
-                                digit_fn=digit_fn, expected_ans=rec['ANS'])
+        steps, _ = bridge_align(rec.get('postfix', rec['post']).split(), composer, abacus,
+                                digit_fn=digit_fn, expected_ans=rec.get('answer', rec['ANS']))
         inst = build_instance(rec, steps)
         samples = emit_vlm_samples(inst, image_dir, sample_idx=i,
                                    render_fn=render_fn, abacus=abacus,

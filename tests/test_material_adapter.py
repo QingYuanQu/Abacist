@@ -32,10 +32,10 @@ def test_dataset_projection_passthrough_struct_fields(exp, tmp_path):
     _write_source(src, [
         {"n": 2, "bk": 0, "ops": "+", "prec_switch": 0, "ans_digits": 1,
          "alt": "1 5 +|5 1 +",
-         "Q": "1+5", "pre": "+ 1 5", "post": "1 5 +", "ANS": 6, "sp": "train"},
+         "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +", "answer": 6, "sp": "train"},
         {"n": 5, "bk": 3, "ops": "+-", "prec_switch": 1, "ans_digits": 2,
          "alt": "7 3 - 2 +",
-         "Q": "7-3+2", "pre": "+ - 7 3 2", "post": "7 3 - 2 +", "ANS": 6, "sp": "test"},
+         "infix": "7-3+2", "prefix": "+ - 7 3 2", "postfix": "7 3 - 2 +", "answer": 6, "sp": "test"},
     ])
     m = Material(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
@@ -59,7 +59,7 @@ def test_dataset_projection_keeps_only_known_struct_fields(exp, tmp_path):
     src = tmp_path / "src.jsonl"
     _write_source(src, [
         {"n": 2, "bk": 0, "ops": "+", "stray": "x",
-         "Q": "1+5", "pre": "+ 1 5", "post": "1 5 +", "ANS": 6, "sp": "train"},
+         "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +", "answer": 6, "sp": "train"},
     ])
     m = Material(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none")
@@ -80,11 +80,11 @@ def test_dataset_projection_splits_by_config_and_groups_by_q(exp, tmp_path):
     # 多解组：同 Q='1+5' 两棵姊妹树；单解 Q='7-3'。源的 sp 故意相反，验证不被 sp 影响。
     _write_source(src, [
         {"n": 2, "ops": "+", "gid": 1, "tree": "(1+5)",
-         "Q": "1+5", "pre": "+ 1 5", "post": "1 5 +", "ANS": 6, "Ic": 0, "bk": 0, "sp": "train"},
+         "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +", "answer": 6, "Ic": 0, "bk": 0, "sp": "train"},
         {"n": 2, "ops": "+", "gid": 1, "tree": "(5+1)",
-         "Q": "1+5", "pre": "+ 5 1", "post": "5 1 +", "ANS": 6, "Ic": 0, "bk": 0, "sp": "test"},
+         "infix": "1+5", "prefix": "+ 5 1", "postfix": "5 1 +", "answer": 6, "Ic": 0, "bk": 0, "sp": "test"},
         {"n": 3, "ops": "-", "gid": 2, "tree": "(7-3)",
-         "Q": "7-3", "pre": "- 7 3", "post": "7 3 -", "ANS": 4, "Ic": 0, "bk": 0, "sp": "test"},
+         "infix": "7-3", "prefix": "- 7 3", "postfix": "7 3 -", "answer": 4, "Ic": 0, "bk": 0, "sp": "test"},
     ])
     m = Material(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
@@ -130,14 +130,14 @@ def test_dataset_projection_aggregates_alt_from_real_format(exp, tmp_path):
     # 一个多解组（gid=7，Q='2+3+5' 两棵姊妹树）+ 一条单解（gid=8）
     _write_source(src, [
         {"n": 3, "ops": "++", "gid": 7, "tree": "((2+3)+5)",
-         "Q": "2+3+5", "pre": "+ + 2 3 5", "post": "2 3 + 5 +",
-         "stack": "2→[2] 3→[2,3] +→[5] 5→[5,5] +→[10]", "ANS": 10, "Ic": 0, "bk": 0, "sp": "train"},
+         "infix": "2+3+5", "prefix": "+ + 2 3 5", "postfix": "2 3 + 5 +",
+         "stack": "2→[2] 3→[2,3] +→[5] 5→[5,5] +→[10]", "answer": 10, "Ic": 0, "bk": 0, "sp": "train"},
         {"n": 3, "ops": "++", "gid": 7, "tree": "(2+(3+5))",
-         "Q": "2+3+5", "pre": "+ 2 + 3 5", "post": "2 3 5 + +",
-         "stack": "2→[2] 3→[2,3] 5→[2,3,5] +→[2,8] +→[10]", "ANS": 10, "Ic": 0, "bk": 0, "sp": "train"},
+         "infix": "2+3+5", "prefix": "+ 2 + 3 5", "postfix": "2 3 5 + +",
+         "stack": "2→[2] 3→[2,3] 5→[2,3,5] +→[2,8] +→[10]", "answer": 10, "Ic": 0, "bk": 0, "sp": "train"},
         {"n": 2, "ops": "+", "gid": 8, "tree": "(1+5)",
-         "Q": "1+5", "pre": "+ 1 5", "post": "1 5 +",
-         "stack": "1→[1] 5→[1,5] +→[6]", "ANS": 6, "Ic": 0, "bk": 0, "sp": "test"},
+         "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +",
+         "stack": "1→[1] 5→[1,5] +→[6]", "answer": 6, "Ic": 0, "bk": 0, "sp": "test"},
     ])
     m = Material(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
@@ -162,11 +162,11 @@ def test_dataset_projection_computes_prec_switch_and_ans_digits(exp, tmp_path):
     src = tmp_path / "src.jsonl"
     _write_source(src, [
         {"n": 5, "ops": "+-", "gid": 1, "tree": "((7-3)+2)",
-         "Q": "7-3+2", "pre": "+ - 7 3 2", "post": "7 3 - 2 +",
-         "stack": "7→[7] 3→[7,3] -→[4] 2→[4,2] +→[6]", "ANS": 6, "Ic": 0, "bk": 3, "sp": "test"},
+         "infix": "7-3+2", "prefix": "+ - 7 3 2", "postfix": "7 3 - 2 +",
+         "stack": "7→[7] 3→[7,3] -→[4] 2→[4,2] +→[6]", "answer": 6, "Ic": 0, "bk": 3, "sp": "test"},
         {"n": 3, "ops": "+×", "gid": 2, "tree": "(4+2×3)",
-         "Q": "4+2×3", "pre": "+ 4 × 2 3", "post": "4 2 3 × +",
-         "stack": "4→[4] 2→[4,2] 3→[4,2,3] ×→[4,6] +→[10]", "ANS": 10, "Ic": 0, "bk": 0, "sp": "train"},
+         "infix": "4+2×3", "prefix": "+ 4 × 2 3", "postfix": "4 2 3 × +",
+         "stack": "4→[4] 2→[4,2] 3→[4,2,3] ×→[4,6] +→[10]", "answer": 10, "Ic": 0, "bk": 0, "sp": "train"},
     ])
     m = Material(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none")
@@ -179,6 +179,6 @@ def test_dataset_projection_computes_prec_switch_and_ans_digits(exp, tmp_path):
     assert rows["7-3+2"]["prec_switch"] == 0
     # 4+2×3：运算符 +,× 优先级不同 → 1 次切换
     assert rows["4+2×3"]["prec_switch"] == 1
-    # ans_digits：ANS 十进制位数
+    # ans_digits：answer 十进制位数
     assert rows["7-3+2"]["ans_digits"] == 1    # 6
     assert rows["4+2×3"]["ans_digits"] == 2    # 10

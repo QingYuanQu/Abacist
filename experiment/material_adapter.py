@@ -70,10 +70,10 @@ def _project_eval_steps(inst: ExpressionInstance, eval_, abacus_bead: bool = Fal
 def project_q(inst: ExpressionInstance, input_fmt: str = 'infix') -> str:
     """投影 Q（中缀/前缀/后缀 + '='）。"""
     if input_fmt == 'prefix':
-        return inst.pre + '='
+        return inst.prefix + '='
     if input_fmt == 'postfix':
-        return inst.post + '='
-    return inst.Q + '='  # infix（默认）
+        return inst.postfix + '='
+    return inst.infix + '='  # infix（默认）
 
 
 def project_a(inst: ExpressionInstance, parse: str, eval_: str,
@@ -82,22 +82,22 @@ def project_a(inst: ExpressionInstance, parse: str, eval_: str,
 
     对照 datagen/parse/format.format_a 的投影规则，逐字节兼容。
     """
-    ans_str = str(inst.ANS)
+    ans_str = str(inst.answer)
     if parse == 'fixed':
-        n = inst.ANS
+        n = inst.answer
         return f"0{n}" if 0 <= n < 10 else str(n)
     if parse == 'direct':
         return ans_str + '#'
 
     reps = []
     if input_fmt != 'infix':
-        reps.append(('INFIX', inst.Q))
+        reps.append(('INFIX', inst.infix))
     if parse in ('pre', 'prepost', 'prepost_stack'):
         if input_fmt != 'prefix':
-            reps.append(('PRE', inst.pre))
+            reps.append(('PRE', inst.prefix))
     if parse in ('post', 'prepost', 'prepost_stack'):
         if input_fmt != 'postfix':
-            reps.append(('POST', inst.post))
+            reps.append(('POST', inst.postfix))
     if parse == 'prepost_stack':
         reps.append(('STACK', _project_stack(inst, eval_)))
     elif eval_ in ('abacus', 'digit'):
@@ -124,7 +124,7 @@ def project_structure_a(inst, parse: str) -> str:
 
     区别于 project_a：后者是 course 型 expr 用的富结构思考链（POST/PRE 标记 + ANS）。
     """
-    seq = inst.pre if parse == 'pre' else inst.post
+    seq = inst.prefix if parse == 'pre' else inst.postfix
     return f'{seq}#'
 
 
@@ -372,7 +372,7 @@ def _ans_digits(ans: int) -> int:
 def _generate_dataset(m, paths, seed: int = 0) -> None:
     """从 source 投影 dataset 类型 trial 数据（按 config 划分，按 Q 分组防泄漏）。
 
-    dataset 源（如 dataset_C.jsonl）是原始 IR（Q/pre/post/ANS/gid…，已固化 prec_switch/
+    dataset 源（如 dataset_C.jsonl）是原始 IR（infix/prefix/postfix/answer/gid…，已固化 prec_switch/
     ans_digits 两个单记录难度元数据；alt 不在此固化，因它跨记录且按记法派生）。它不是直接
     可训练的 {Q, A}。这里 Q 用 project_q（输入记法 + '='），A 用 project_structure_a（目标
     记法 + '#'，纯结构转换、不求值）；并补齐 bucket_report 需要的字段。
@@ -384,13 +384,13 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
     做确定性分流，复现性语义统一。改 dataset 的 split / data_seed 立即生效、无需重生成上游
     dataset_C。
 
-      - alt         ：同 Q 的多解集合（'|' 分隔的目标记法串）。按 Q 聚合源里同一 Q 的
-                      所有合法解（dataset_C 靠 gid 标识多解组，但按 Q 聚合更通用：同 Q
+      - alt         ：同 infix 的多解集合（'|' 分隔的目标记法串）。按 infix 聚合源里同一 infix 的
+                      所有合法解（dataset_C 靠 gid 标识多解组，但按 infix 聚合更通用：同 infix
                       必对应同一解集合）。缺失时退化为空（bucket_report 退化为严格串等）。
-      - prec_switch ：从 Q 现算（源若自带则优先，兼容旧/手工格式）。
-      - ans_digits  ：从 ANS 现算（源若自带则优先）。
+      - prec_switch ：从 infix 现算（源若自带则优先，兼容旧/手工格式）。
+      - ans_digits  ：从 answer 现算（源若自带则优先）。
 
-    注意：alt 必须在此按 Q 聚合派生（跨记录 + 分记法，上游固化会冗余且耦合记法）；
+    注意：alt 必须在此按 infix 聚合派生（跨记录 + 分记法，上游固化会冗余且耦合记法）；
     prec_switch/ans_digits 已由 dataset_generator 在生成阶段固化，下游优先透传
     （record.get(..., 现算)），仅 fallback 兼容旧格式/手工源。
     """
@@ -406,7 +406,7 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
             record = json.loads(line)
             inst = build_instance(record, [])
             src_rows.append((record, inst))
-            q = record['Q']
+            q = inst.infix
             sol = project_structure_a(inst, proj_parse).rstrip('#')
             alt_by_q.setdefault(q, set()).add(sol)
             if q not in q_keys:
@@ -429,19 +429,19 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
             a = project_structure_a(inst, proj_parse)
 
             # alt：优先用源自带；否则按 Q 聚合（真实 dataset_C 走此路）
-            alt = record.get('alt') or '|'.join(sorted(alt_by_q.get(record['Q'], set())))
+            alt = record.get('alt') or '|'.join(sorted(alt_by_q.get(inst.infix, set())))
             struct = {
                 'n': record.get('n'),
                 'bk': record.get('bk', 0),
                 'alt': alt,
-                'prec_switch': record.get('prec_switch', _count_prec_switch(record['Q'])),
-                'ans_digits': record.get('ans_digits', _ans_digits(record['ANS'])),
+                'prec_switch': record.get('prec_switch', _count_prec_switch(inst.infix)),
+                'ans_digits': record.get('ans_digits', _ans_digits(inst.answer)),
             }
             out_line = json.dumps(
                 {"category": record.get('ops', ''), "Q": q, "A": a, **struct},
                 ensure_ascii=False) + '\n'
 
-            dest = q_dest[record['Q']]
+            dest = q_dest[inst.infix]
             if test_f is not None and dest == 'test':
                 test_f.write(out_line)
                 test_count += 1

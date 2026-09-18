@@ -557,7 +557,7 @@ def split_by_q(samples, rng):
     """Split 8:2 by Q group (same Q -> same split)."""
     by_q = defaultdict(list)
     for s in samples:
-        by_q[s['Q']].append(s)
+        by_q[s['infix']].append(s)
     q_keys = list(by_q.keys())
     rng.shuffle(q_keys)
     total = len(samples)
@@ -583,11 +583,13 @@ def make_dataset_a(samples):
         q = infix_no_outer(t)
         result.append({
             'n': s['n'],
-            'Q': q,
-            'pre': prefix(t),
-            'post': postfix(t),
+            'ops': ops_of_tree(s['tree']),
+            'tree': infix_full(s['tree']),
+            'infix': q,
+            'prefix': prefix(t),
+            'postfix': postfix(t),
             'stack': stack_eval_sym(t),
-            'ANS': q,  # Symbolic ANS = Q
+            'prec_switch': count_prec_switch(q),
             'Ic': s['ic'],
             'bk': s['bk'],
             'sp': s['sp']
@@ -603,11 +605,13 @@ def make_dataset_b(samples):
         ans = infix_no_outer(t)  # Canonical form
         result.append({
             'n': s['n'],
-            'Q': q,
-            'pre': prefix(t),
-            'post': postfix(t),
+            'ops': ops_of_tree(s['tree']),
+            'tree': infix_full(s['tree']),
+            'infix': q,
+            'prefix': prefix(t),
+            'postfix': postfix(t),
             'stack': stack_eval_sym(t),
-            'ANS': ans,
+            'prec_switch': count_prec_switch(q),
             'Ic': s['ic'],
             'bk': s['bk'],
             'sp': s['sp']
@@ -730,11 +734,11 @@ def make_dataset_c(samples, rng):
                 'ops': ops_of_tree(s['tree']),
                 'gid': gi,
                 'tree': infix_full(s['tree']),
-                'Q': q,
-                'pre': prefix(nt),
-                'post': postfix(nt),
+                'infix': q,
+                'prefix': prefix(nt),
+                'postfix': postfix(nt),
                 'stack': stack_eval_num(nt),
-                'ANS': ans,
+                'answer': ans,
                 'prec_switch': count_prec_switch(q),
                 'ans_digits': len(str(abs(ans))),
                 'Ic': s['ic'],
@@ -777,7 +781,7 @@ def compute_stats(samples, ds_a, ds_b, ds_c):
         stats['split_C'][sp] = stats['split_C'].get(sp, 0) + 1
         nc = str(d['n'])
         stats['by_n_C'][nc] = stats['by_n_C'].get(nc, 0) + 1
-    stats['unique_Q_C'] = len(set(d['Q'] for d in ds_c))
+    stats['unique_Q_C'] = len(set(d['infix'] for d in ds_c))
     stats['multi_solution_samples_C'] = len(ds_c) - stats['unique_Q_C']
     return stats
 
