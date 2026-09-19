@@ -5,7 +5,7 @@ experiment/__main__.py 的 --reset 系列命令是这些原子函数的组合。
 
 产物类别（路径一律取自 config.TrialPaths，此处不重复拼字符串）：
   purge_models          memory/trial_{N}.pth + trial_{N}_ckpt.pt（按 trial 号索引）
-  purge_data            material/*.jsonl（按 trial 号索引）
+  purge_data            data/*.jsonl（按 trial 号索引）
   purge_vocab           vocab/*.json（全局，无范围）
   purge_logs            logs/trial_{N}_*.jsonl（按 trial 号索引）
   purge_trial_results   report.csv 的结果列
@@ -18,7 +18,7 @@ experiment/__main__.py 的 --reset 系列命令是这些原子函数的组合。
 import glob
 import os
 
-from experiment.config import Experiment
+from experiment.domain import Experiment
 from experiment.tools.store import ReportTable
 
 
@@ -66,7 +66,7 @@ def purge_data(exp: Experiment, from_trial=None):
 
     targets = []
     if trial_ids is None:
-        targets = glob.glob(os.path.join(exp.material_dir, "*.jsonl"))
+        targets = glob.glob(os.path.join(exp.data_dir, "*.jsonl"))
     else:
         for tid in trial_ids:
             paths = exp.trials[tid].paths
@@ -137,7 +137,7 @@ def reset_data(exp: Experiment):
 
 
 def reset_full(exp: Experiment):
-    """清除模型和数据产物（memory + material + vocab + logs），保留评测记录。"""
+    """清除模型和数据产物（memory + data + vocab + logs），保留评测记录。"""
     purge_models(exp)
     purge_data(exp)
     purge_vocab(exp)

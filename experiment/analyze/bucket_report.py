@@ -29,7 +29,7 @@ import os
 import torch
 
 from model import GPT
-from model.config import ModelConfig
+from model.domain import ModelConfig
 from model.vocab import load_vocab
 from model_lm.eval import generate_batch
 from experiment.tools.loader import load_experiment

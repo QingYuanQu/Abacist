@@ -292,7 +292,7 @@ def count_prec_switch(q):
 
     提取 q 的运算符序列（跳过数字/空格/括号），统计相邻优先级不同的相邻对。
     例：'2+3×5'（+,×）→ 1；'2+3+5'（+,+）→ 0。
-    与 experiment/material_adapter._count_prec_switch 同源（均基于 PREC）。"""
+    与 experiment/data_adapter._count_prec_switch 同源（均基于 PREC）。"""
     ops = [c for c in q if c in PREC]
     return sum(1 for a, b in zip(ops, ops[1:]) if PREC[a] != PREC[b])
 

@@ -1,6 +1,6 @@
 """store.py — 实验结果表（report.csv）读写。
 
-配置只有两个来源：`config.yaml`（唯一输入，见 experiment/schema.py）和磁盘产物。
+配置只有两个来源：`config.yaml`（唯一输入，见 experiment/config.py）和磁盘产物。
 本模块只负责**结果**这一侧：每行 = 一个 trial 的最优 Record + 判定口径 + passed。
 
 写约定（路线 B / 单写方）：report.csv 只由"完整 train+eval"运行写出（runner 路径），
@@ -11,7 +11,7 @@
 import csv
 import os
 
-from model.record import RECORD_FIELDS, Record
+from common.record import RECORD_FIELDS, Record
 
 # id/name 是身份，acc_mode/pass_threshold 让每行自带判定口径
 # （旧格式只有 passed 而无口径，同一文件里 0.15 判过、0.26 判不过，无法自证）

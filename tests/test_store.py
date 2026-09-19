@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from model.record import Record
+from common.record import Record
 from experiment.tools.store import REPORT_COLS, ReportMismatch, ReportTable
 
 

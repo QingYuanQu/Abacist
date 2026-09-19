@@ -1,7 +1,7 @@
 """loader.py — Experiment 的装配层：config.yaml + 磁盘产物 → 聚合根。
 
 职责边界（刻意收窄）：
-    experiment/schema.py  认识文件格式（键名、校验）—— 唯一读 config.yaml 的地方
+    experiment/config.py  认识文件格式（键名、校验）—— 唯一读 config.yaml 的地方
     experiment/loader.py  认识磁盘布局（产物放哪）并把 spec + 结果装配成 Experiment
 
 因此本模块只有三个函数：load / init / clone。
@@ -9,12 +9,12 @@
 
 import os
 
-from experiment.config import Experiment, Trial, TrialPaths
-from experiment.schema import clone_text, load_spec, skeleton
+from experiment.domain import Experiment, Trial, TrialPaths
+from experiment.config import clone_text, load_spec, skeleton
 from experiment.tools.store import ReportTable
 
 # 实验目录下的产物子目录（均为可再生，不参与版本控制）
-ARTIFACT_DIRS = ("material", "vocab", "memory", "logs")
+ARTIFACT_DIRS = ("data", "vocab", "memory", "logs")
 
 
 def studies_root(project_root: str) -> str:
@@ -64,10 +64,10 @@ def load_experiment(name: str, project_root: str | None = None) -> Experiment:
         Trial(
             id=ts.id,
             name=ts.name,
-            material=ts.material,
+            data=ts.data,
             method=ts.method,
             heads=ts.heads,
-            paths=TrialPaths.for_trial(exp, ts.id, ts.name, ts.material),
+            paths=TrialPaths.for_trial(exp, ts.id, ts.name, ts.data),
             record=results.get(ts.id, (None, None))[0],
             passed=results.get(ts.id, (None, None))[1],
         )

@@ -1,6 +1,6 @@
 # 实验配置 —— 唯一输入文件。
-# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
-# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# 键名 = domain.py / model/domain.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/data/method 是 trial 级。
 # id 由列表位置派生（0..N-1），不要手写。
 name: PATTERN_post2pre
 data_seed: 42
@@ -34,7 +34,7 @@ eval:
   pass_threshold: 0.95
 trial_defaults:
   # 所有 trial 学同一份 dataset_C 投影（postfix → pre）；只变头结构（heads）。
-  material:
+  data:
     type: dataset
     repeat: 0
     start: 0

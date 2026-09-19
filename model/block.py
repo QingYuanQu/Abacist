@@ -7,7 +7,7 @@ import torch
 from torch import nn
 
 from model.attention import Attention
-from model.config import ModelConfig
+from model.domain import ModelConfig
 from model.norm import RMSNorm
 from model.registry import build_pos_emb
 

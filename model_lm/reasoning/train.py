@@ -6,7 +6,7 @@ from datetime import datetime
 import torch
 from torch import nn
 from model.train_utils import save_checkpoint
-from model.record import Record
+from common.record import Record
 from model_lm.eval import compute_accuracy
 
 

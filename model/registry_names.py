@@ -3,7 +3,7 @@
 为什么单独一份
 --------------
 `model/registry.py` 与 `model/pos_emb/` 顶层都 `import torch`，而配置校验
-（`experiment/schema.py`）只需要名字。若校验直接查注册表，则**校验一份 YAML 也要
+（`experiment/config.py`）只需要名字。若校验直接查注册表，则**校验一份 YAML 也要
 拉起整个深度学习框架**，代价有二：
   1. 慢：改一个配置键就要加载 torch；
   2. 脏：torch 会把自带 OpenMP 运行库带进进程，此后 `matplotlib.savefig` 会直接以

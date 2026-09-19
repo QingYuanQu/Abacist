@@ -35,7 +35,7 @@ from torch import nn
 from numpy import integer as np_integer
 from torch.utils.data import ConcatDataset, DataLoader
 
-from model.config import BrainConfig, ModelConfig, PosEmbConfig
+from model.domain import BrainConfig, ModelConfig, PosEmbConfig
 from model import GPT
 from model.vision import VisionEncoder
 from model_vlm.dataset import VLMDataset, vlm_collate

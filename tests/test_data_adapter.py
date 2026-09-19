@@ -1,7 +1,7 @@
 """dataset 投影契约测试。
 
 关键点：dataset 源（dataset_C.jsonl 等）自带的难度结构字段
-（n / bk / prec_switch / ans_digits / alt）必须透传进 material.jsonl，
+（n / bk / prec_switch / ans_digits / alt）必须透传进 data.jsonl，
 否则 bucket_report 的 n×bk 分桶表拿不到维度会静默失效。
 这条透传在 2026-09-17 之前是丢掉的（投影只写 {category,Q,A}）。
 """
@@ -10,8 +10,8 @@ import os
 
 import pytest
 
-from experiment.config import Experiment, Material, TrialPaths
-from experiment.material_adapter import _generate_dataset
+from experiment.domain import Experiment, Data, TrialPaths
+from experiment.data_adapter import _generate_dataset
 
 _STRUCT_FIELDS = ("n", "bk", "prec_switch", "ans_digits", "alt")
 
@@ -37,10 +37,10 @@ def test_dataset_projection_passthrough_struct_fields(exp, tmp_path):
          "alt": "7 3 - 2 +",
          "infix": "7-3+2", "prefix": "+ - 7 3 2", "postfix": "7 3 - 2 +", "answer": 6, "sp": "test"},
     ])
-    m = Material(type="dataset", source=str(src),
+    m = Data(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
     paths = TrialPaths.for_trial(exp, 0, "t", m)
-    # 真实管线里 material/ 由 --init 预建；此处模拟该前置条件
+    # 真实管线里 data/ 由 --init 预建；此处模拟该前置条件
     os.makedirs(os.path.dirname(paths.train_data), exist_ok=True)
     _generate_dataset(m, paths)
 
@@ -55,13 +55,13 @@ def test_dataset_projection_passthrough_struct_fields(exp, tmp_path):
 
 
 def test_dataset_projection_keeps_only_known_struct_fields(exp, tmp_path):
-    """未知字段不应被无脑塞进 material.jsonl（投影契约是 category/Q/A + 已知结构字段）。"""
+    """未知字段不应被无脑塞进 data.jsonl（投影契约是 category/Q/A + 已知结构字段）。"""
     src = tmp_path / "src.jsonl"
     _write_source(src, [
         {"n": 2, "bk": 0, "ops": "+", "stray": "x",
          "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +", "answer": 6, "sp": "train"},
     ])
-    m = Material(type="dataset", source=str(src),
+    m = Data(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none")
     paths = TrialPaths.for_trial(exp, 0, "t", m)
     os.makedirs(os.path.dirname(paths.train_data), exist_ok=True)
@@ -86,7 +86,7 @@ def test_dataset_projection_splits_by_config_and_groups_by_q(exp, tmp_path):
         {"n": 3, "ops": "-", "gid": 2, "tree": "(7-3)",
          "infix": "7-3", "prefix": "- 7 3", "postfix": "7 3 -", "answer": 4, "Ic": 0, "bk": 0, "sp": "test"},
     ])
-    m = Material(type="dataset", source=str(src),
+    m = Data(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
     paths = TrialPaths.for_trial(exp, 0, "t", m)
     os.makedirs(os.path.dirname(paths.train_data), exist_ok=True)
@@ -139,7 +139,7 @@ def test_dataset_projection_aggregates_alt_from_real_format(exp, tmp_path):
          "infix": "1+5", "prefix": "+ 1 5", "postfix": "1 5 +",
          "stack": "1→[1] 5→[1,5] +→[6]", "answer": 6, "Ic": 0, "bk": 0, "sp": "test"},
     ])
-    m = Material(type="dataset", source=str(src),
+    m = Data(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none", split=0.2)
     paths = TrialPaths.for_trial(exp, 0, "t", m)
     os.makedirs(os.path.dirname(paths.train_data), exist_ok=True)
@@ -168,7 +168,7 @@ def test_dataset_projection_computes_prec_switch_and_ans_digits(exp, tmp_path):
          "infix": "4+2×3", "prefix": "+ 4 × 2 3", "postfix": "4 2 3 × +",
          "stack": "4→[4] 2→[4,2] 3→[4,2,3] ×→[4,6] +→[10]", "answer": 10, "Ic": 0, "bk": 0, "sp": "train"},
     ])
-    m = Material(type="dataset", source=str(src),
+    m = Data(type="dataset", source=str(src),
                  input_format="infix", parse="post", eval="none")
     paths = TrialPaths.for_trial(exp, 0, "t", m)
     os.makedirs(os.path.dirname(paths.train_data), exist_ok=True)

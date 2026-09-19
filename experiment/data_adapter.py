@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""experiment/material_adapter.py —— 实验材料适配器（阶段 3+4）。
+"""experiment/data_adapter.py —— 实验材料适配器（阶段 3+4）。
 
-职责：读 Trial.material 配置 → 调底层 parse（表达式生成）+ eval（abacus/digit，经 bridge）
-→ 投影成 model_lm 的 material.jsonl（{category, Q, A}）。
+职责：读 Trial.data 配置 → 调底层 parse（表达式生成）+ eval（abacus/digit，经 bridge）
+→ 投影成 model_lm 的 data.jsonl（{category, Q, A}）。
 
 这是 datagen/ 的「新内核替代」（阶段 4 起 datagen/ 已删除）：
   - 树枚举 / 全括号中缀 / 前后序  → parse.dataset_generator（替代 datagen/parse/traverse）
@@ -128,7 +128,7 @@ def project_structure_a(inst, parse: str) -> str:
     return f'{seq}#'
 
 
-# ==================== 生成层：material 配置 → 表达式 → IR → material.jsonl ====================
+# ==================== 生成层：data 配置 → 表达式 → IR → data.jsonl ====================
 
 def _iter_exprs(start, end, repeat, op_list, sample, rng):
     """生成 (tree_idx, op_combo, operands) 流。sample>0 随机采样（去重），否则全枚举。"""
@@ -225,7 +225,7 @@ def _generate_expr(m, paths, seed) -> tuple[int, int]:
         if test_f:
             test_f.close()
 
-    print(f"[material_adapter] expr 生成完成：训练 {train_count} / 测试 {test_count} / 过滤 {filtered}")
+    print(f"[data_adapter] expr 生成完成：训练 {train_count} / 测试 {test_count} / 过滤 {filtered}")
     return train_count, test_count
 
 
@@ -379,7 +379,7 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
     （数字集 dataset_D.jsonl 带 answer；字母集 dataset_C.jsonl 不带 answer，评测走结构性接受。）
 
     分流（P0b 修复）：不再信任源文件写死的 sp 字段（那由上游生成器按固定 0.8 写死、绕过
-    experiment 配置），改由本实验的 split（Material.split，默认 0.2 = 20% 测试，与历史一致）
+    experiment 配置），改由本实验的 split（Data.split，默认 0.2 = 20% 测试，与历史一致）
     + seed（experiment.data_seed，经 generate_trial 传入）按 Q 分组确定性划分——同一 Q 的
     所有记录（含多解姊妹树）整体进 train 或 test，杜绝多解泄漏；且与 expr/bead 型用同一 seed
     做确定性分流，复现性语义统一。改 dataset 的 split / data_seed 立即生效、无需重生成上游
@@ -455,12 +455,12 @@ def _generate_dataset(m, paths, seed: int = 0) -> None:
         train_f.close()
         if test_f:
             test_f.close()
-    print(f"[material_adapter] dataset 投影完成：训练 {train_count} / 测试 {test_count}")
+    print(f"[data_adapter] dataset 投影完成：训练 {train_count} / 测试 {test_count}")
 
 
 def generate_trial(cfg, seed) -> None:
-    """根据单个 trial 的 material 与 paths 生成数据。cfg 为 Trial 对象。"""
-    m = cfg.material
+    """根据单个 trial 的 data 与 paths 生成数据。cfg 为 Trial 对象。"""
+    m = cfg.data
     paths = cfg.paths
     print("=" * 60)
     print(f"[数据生成] trial {cfg.id}: {cfg.name} (type={m.type})")
@@ -475,4 +475,4 @@ def generate_trial(cfg, seed) -> None:
     elif m.type == 'dataset':
         _generate_dataset(m, paths, seed)
     else:
-        raise ValueError(f"未知 material.type: {m.type!r}（env 类型已删除）")
+        raise ValueError(f"未知 data.type: {m.type!r}（env 类型已删除）")

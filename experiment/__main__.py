@@ -13,11 +13,11 @@ import argparse
 import os
 import sys
 
-from experiment.config import Experiment
+from experiment.domain import Experiment
 from experiment.tools.cleanup import reset_data, reset_eval, reset_from, reset_full
 from experiment.tools.loader import clone_experiment, init_experiment, load_experiment
 from experiment.runner import run_experiment
-from experiment.schema import ConfigError, UnsupportedFeature
+from experiment.config import ConfigError, UnsupportedFeature
 from experiment.tools.store import ReportMismatch
 
 TAG = "[实验]"
@@ -57,13 +57,13 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="只读检查配置与产物就绪情况，不生成数据、不训练")
     parser.add_argument("--reset", action="store_true",
-                        help="清除 report.csv 结果 + memory + material + vocab + logs，回到初始状态")
+                        help="清除 report.csv 结果 + memory + data + vocab + logs，回到初始状态")
     parser.add_argument("--reset-eval", action="store_true",
                         help="清除 memory 和 report.csv 结果（保留数据和词表）")
     parser.add_argument("--reset-data", action="store_true",
                         help="清除数据和词表（保留 memory 和评测记录）")
     parser.add_argument("--reset-full", action="store_true",
-                        help="清除 memory + material + vocab + logs（保留评测记录）")
+                        help="清除 memory + data + vocab + logs（保留评测记录）")
     parser.add_argument("--reset-from", type=int, metavar="N",
                         help="清除第 N 个 trial 及其后所有 trial 的模型、结果与日志")
     parser.add_argument("--status", action="store_true",
@@ -112,12 +112,12 @@ def main():
 
     if args.reset_data:
         reset_data(exp)
-        print(f"{TAG} 已清除数据产物（material + vocab）")
+        print(f"{TAG} 已清除数据产物（data + vocab）")
         return
 
     if args.reset_full:
         reset_full(exp)
-        print(f"{TAG} 已清除模型和数据（memory + material + vocab + logs）")
+        print(f"{TAG} 已清除模型和数据（memory + data + vocab + logs）")
         return
 
     if args.reset_from is not None:

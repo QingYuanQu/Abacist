@@ -14,7 +14,7 @@ import torch
 from torch import nn
 
 from model.block import Block
-from model.config import ModelConfig
+from model.domain import ModelConfig
 from model.norm import RMSNorm
 from model.registry import build_pos_emb
 

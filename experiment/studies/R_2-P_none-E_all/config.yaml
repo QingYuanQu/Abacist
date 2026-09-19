@@ -1,6 +1,6 @@
 # 实验配置 —— 唯一输入文件。
-# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
-# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# 键名 = domain.py / model/domain.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/data/method 是 trial 级。
 # id 由列表位置派生（0..N-1），不要手写。
 name: R_2-P_none-E_all
 data_seed: 42
@@ -22,8 +22,8 @@ eval:
   pass_threshold: 0.9
 trial_defaults:
   # 所有 trial 用同一份 4 位加法枚举（infix, parse=none）；只差 eval 与 abacus_bead，
-  # 故放 defaults，trial 仅以 material:{eval: ..., abacus_bead: ...} 写差量。
-  material:
+  # 故放 defaults，trial 仅以 data:{eval: ..., abacus_bead: ...} 写差量。
+  data:
     type: expr
     ops: +
     repeat: 2
@@ -42,7 +42,7 @@ trial_defaults:
     learning_rate: 0.001
     shuffle: true
 trials:
-  - {name: 4位_直接计算, material: {eval: none, abacus_bead: false}}
-  - {name: 4位_数位分解, material: {eval: digit, abacus_bead: false}}
-  - {name: 4位_珠算, material: {eval: abacus, abacus_bead: false}}
-  - {name: 4位_珠算_盘面, material: {eval: abacus, abacus_bead: true}}
+  - {name: 4位_直接计算, data: {eval: none, abacus_bead: false}}
+  - {name: 4位_数位分解, data: {eval: digit, abacus_bead: false}}
+  - {name: 4位_珠算, data: {eval: abacus, abacus_bead: false}}
+  - {name: 4位_珠算_盘面, data: {eval: abacus, abacus_bead: true}}

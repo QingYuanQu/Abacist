@@ -26,7 +26,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from model.config import BrainConfig, ModelConfig, PosEmbConfig
+from model.domain import BrainConfig, ModelConfig, PosEmbConfig
 from model import GPT
 from model.vision import VisionEncoder
 from model_vm.dataset import VisionBeadDataset, vision_collate

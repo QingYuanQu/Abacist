@@ -11,7 +11,7 @@ import math
 import torch
 from torch import nn
 
-from model.config import ModelConfig
+from model.domain import ModelConfig
 from model.norm import RMSNorm
 from model.registry import get_attention
 

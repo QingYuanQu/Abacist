@@ -1,6 +1,6 @@
 # 实验配置 —— 唯一输入文件。
-# 键名 = config.py / model/config.py 的 dataclass 字段名；写错键名会直接报错。
-# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/material/method 是 trial 级。
+# 键名 = domain.py / model/domain.py 的 dataclass 字段名；写错键名会直接报错。
+# 作用域：brain/pos_emb/train/eval 是实验级；heads/head_dims/theta_per_head/data/method 是 trial 级。
 # id 由列表位置派生（0..N-1），不要手写。
 name: R_12-P_all-E_none
 data_seed: 42
@@ -22,8 +22,8 @@ eval:
   pass_threshold: 0.95
 trial_defaults:
   # 所有 trial 用同一份 expr 枚举（ops/repeat/range/...）；只差 parse 投影，故放 defaults，
-  # trial 仅以 material:{parse: ...} 写差量（schema 做字段级合并）。
-  material:
+  # trial 仅以 data:{parse: ...} 写差量（schema 做字段级合并）。
+  data:
     type: expr
     ops: '+-×'
     repeat: 12
@@ -42,8 +42,8 @@ trial_defaults:
     learning_rate: 0.001
     shuffle: true
 trials:
-  - {name: none, material: {parse: none}}
-  - {name: pre, material: {parse: pre}}
-  - {name: post, material: {parse: post}}
-  - {name: prepost, material: {parse: prepost}}
-  - {name: prepost_stack, material: {parse: prepost_stack}}
+  - {name: none, data: {parse: none}}
+  - {name: pre, data: {parse: pre}}
+  - {name: post, data: {parse: post}}
+  - {name: prepost, data: {parse: prepost}}
+  - {name: prepost_stack, data: {parse: prepost_stack}}

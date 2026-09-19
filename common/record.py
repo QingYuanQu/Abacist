@@ -1,8 +1,11 @@
 """训练记录 —— 单 epoch 完整训练评估记录（Record）。
 
-跨域共享类型：由 `model_lm` 训练时生产（每 epoch 一条，jsonl 日志），
-由 `experiment` 消费（report.csv 存最优一条）。故置于 model 域，
-`model_lm` 与 `experiment` 都从本模块取 Record，互不越界依赖。
+跨子系统共享契约（非架构、非任一 model_* 后端私有）：
+由各个 `model_*` 后端的训练代码生产（每 epoch 一条，jsonl 日志），
+由 `experiment` 消费（report.csv 存最优一条）。
+
+故置于中立的 `common/` —— 所有 `model_*` 后端与 `experiment` 都从本模块取 Record，
+互不越界依赖：后端之间互不认识，后端也不反向依赖编排层 experiment。
 
 序列化：
     - to_dict / from_dict —— jsonl（保留原始精度，容忍缺键）

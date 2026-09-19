@@ -1,6 +1,6 @@
 """单 trial 评估 + 单 trial CLI（实验编排层，2026-09-04 从 model_lm/eval.py 迁出）。
 
-迁出原因：eval_one_trial 依赖 experiment/trial 聚合对象（exp.trials[].paths/material、
+迁出原因：eval_one_trial 依赖 experiment/trial 聚合对象（exp.trials[].paths/data、
 exp.brain/pos_emb/eval、ReportTable 报告回写），属于实验编排而非通用 LM 能力；
 底层的批量推理、准确率统计留在 model_lm/eval.py，此处只做实验侧装配。
 
@@ -14,11 +14,11 @@ import os
 import torch
 
 from experiment.tools.loader import load_experiment
-from experiment.config import ExecutionContext
-from model.config import ModelConfig
+from experiment.domain import ExecutionContext
+from model.domain import ModelConfig
 from model import GPT
 from model.vocab import load_vocab
-from model_lm.eval import (          # 通用 LM 能力（含内部自检 _verify_generate_batch）
+from model_lm.reasoning.eval import (          # 通用 LM 能力（含内部自检 _verify_generate_batch）
     _strip_stop,
     _verify_generate_batch,
     chat,

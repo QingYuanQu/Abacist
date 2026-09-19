@@ -7,8 +7,8 @@ experiment 语义：每个 trial 从零训练，无复习、无权重传递，�
 import os
 import torch
 
-from experiment.config import Experiment, ExecutionContext
-from experiment.material_adapter import generate_trial
+from experiment.domain import Experiment, ExecutionContext
+from experiment.data_adapter import generate_trial
 from experiment.tools.store import ReportTable
 from experiment.trial.train_and_eval import train_and_eval_trial
 from model.vocab import ensure_experiment_vocab
@@ -21,7 +21,7 @@ def prepare_all(exp: Experiment) -> dict:
         {trial_id: vocab_data}（experiment 语义下所有 trial 共享同一份词表）
     """
     print(f"[实验] 步骤1: 确保全部 trial 数据就绪...")
-    os.makedirs(exp.material_dir, exist_ok=True)
+    os.makedirs(exp.data_dir, exist_ok=True)
     for trial in exp.trials:
         paths = trial.paths
         if not os.path.isfile(paths.train_data) or \

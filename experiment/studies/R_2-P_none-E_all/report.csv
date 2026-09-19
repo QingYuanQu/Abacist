@@ -1,0 +1,5 @@
+id,name,epoch,timestamp,train_loss,lr,acc,acc_ans,acc_think,correct,correct_ans,correct_think,total,epoch_time_s,elapsed_s,passed
+0,4位_直接计算,,,,,,,,,,,,,,
+1,4位_数位分解,,,,,,,,,,,,,,
+2,4位_珠算,,,,,,,,,,,,,,
+3,4位_珠算_盘面,,,,,,,,,,,,,,

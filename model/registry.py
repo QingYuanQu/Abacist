@@ -15,7 +15,7 @@
 from collections.abc import Callable
 
 from model.attn_fn import sdpa_attention, eager_attention
-from model.config import ModelConfig
+from model.domain import ModelConfig
 
 from model.pos_emb import (PosEmbedding, build_alibi, build_learned,
                            build_none, build_rope, build_sinusoidal)

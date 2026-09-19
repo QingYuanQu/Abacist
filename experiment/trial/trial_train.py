@@ -10,9 +10,9 @@ from functools import partial
 from torch.utils.data import DataLoader
 from torch import optim
 
-from experiment.config import Experiment, Trial, ExecutionContext
-from model.record import Record
-from model.config import ModelConfig
+from experiment.domain import Experiment, Trial, ExecutionContext
+from common.record import Record
+from model.domain import ModelConfig
 
 def collate_fn(pad_id, batch):
     """将批次中的序列填充到相同长度"""
@@ -29,7 +29,7 @@ def train_one_trial(trial_id: int, exp: Experiment, ctx: ExecutionContext) -> "R
     """单 trial 训练。
 
     Args:
-        trial_id: trial 配置（material/method/artifacts）
+        trial_id: trial 配置（data/method/artifacts）
         exp: 实验聚合根（brain/train/eval）
         ctx: 运行时上下文（vocab_data/device/prev_model_path/review_files/epochs/seed）
     Returns:

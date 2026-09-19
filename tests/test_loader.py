@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from experiment.config import Experiment
+from experiment.domain import Experiment
 from experiment.tools.loader import (ARTIFACT_DIRS, clone_experiment, experiment_dir,
                                init_experiment, load_experiment, studies_root)
 
@@ -58,11 +58,11 @@ def test_clone_copies_config_but_not_results(tmp_path):
     assert [t.name for t in cloned.trials] == [t.name for t in source.trials]
     assert cloned.trials[0].record is None
     # 克隆不复制数据/词表/权重/日志
-    assert not os.listdir(cloned.material_dir) if os.path.isdir(cloned.material_dir) else True
+    assert not os.listdir(cloned.data_dir) if os.path.isdir(cloned.data_dir) else True
 
 
 def test_load_backfills_results_from_report_csv(tmp_path):
-    from model.record import Record
+    from common.record import Record
     from experiment.tools.store import ReportTable
 
     init_experiment(NAME, str(tmp_path))

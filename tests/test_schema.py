@@ -1,4 +1,4 @@
-"""config.yaml 的唯一加载器（experiment/schema.py）—— 键白名单、作用域与三轴校验。
+"""config.yaml 的唯一加载器（experiment/config.py）—— 键白名单、作用域与三轴校验。
 
 这些用例是配置格式的回归网：旧格式（material.csv + config/*.json）之所以能
 静默跑出错误结论，就是因为"拼错的键永远不报错"。凡白名单/校验被放宽，
@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from experiment.schema import (ConfigError, UnsupportedFeature, load_spec,
+from experiment.config import (ConfigError, UnsupportedFeature, load_spec,
                                parse_spec)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -28,7 +28,7 @@ def raw_experiment() -> dict:
         "trial_defaults": {
             "method": {"epochs": 1, "repeat_factor": 1, "batch_size": 4,
                        "learning_rate": 1.0e-3, "shuffle": True},
-            "material": {"type": "expr", "ops": "+-", "repeat": 2, "start": 0, "end": 9},
+            "data": {"type": "expr", "ops": "+-", "repeat": 2, "start": 0, "end": 9},
         },
         "trials": [
             {"name": "a", "heads": [4, 4]},
@@ -54,9 +54,9 @@ def test_minimal_config_ok():
     assert [t.name for t in spec.trials] == ["a", "b"]
     assert spec.trials[0].heads == [4, 4]
     assert spec.trials[0].method.epochs == 1
-    # trial_defaults.material 被继承，trial 里没重复写
-    assert spec.trials[1].material.ops == "+-"
-    assert spec.trials[1].material.type == "expr"
+    # trial_defaults.data 被继承，trial 里没重复写
+    assert spec.trials[1].data.ops == "+-"
+    assert spec.trials[1].data.type == "expr"
 
 
 def test_heads_default_is_uniform():
@@ -68,18 +68,18 @@ def test_heads_default_is_uniform():
     assert spec.trials[0].heads == [4, 4]
 
 
-def test_trial_material_merges_over_default():
-    """trial 的 material 是 defaults 的差量：缺的字段继承，同名键覆盖。"""
+def test_trial_data_merges_over_default():
+    """trial 的 data 是 defaults 的差量：缺的字段继承，同名键覆盖。"""
     raw = raw_experiment()
-    raw["trials"][1]["material"] = {"repeat": 5}        # 只写差量，其余继承
+    raw["trials"][1]["data"] = {"repeat": 5}        # 只写差量，其余继承
     spec = parse_spec(raw, "EXP")
-    assert spec.trials[1].material.repeat == 5          # 差量覆盖
-    assert spec.trials[1].material.ops == "+-"          # 其余字段继承 defaults
-    assert spec.trials[1].material.type == "expr"
+    assert spec.trials[1].data.repeat == 5          # 差量覆盖
+    assert spec.trials[1].data.ops == "+-"          # 其余字段继承 defaults
+    assert spec.trials[1].data.type == "expr"
     # 同名键覆盖
     raw = raw_experiment()
-    raw["trials"][1]["material"] = {"ops": "*/"}
-    assert parse_spec(raw, "EXP").trials[1].material.ops == "*/"
+    raw["trials"][1]["data"] = {"ops": "*/"}
+    assert parse_spec(raw, "EXP").trials[1].data.ops == "*/"
 
 
 def test_acc_mode_from_registry():
@@ -204,25 +204,25 @@ def test_theta_per_head_requires_uniform_head_count():
     assert any("各层头数一致" in e for e in errs)
 
 
-# ==================== material / 枚举 ====================
+# ==================== data / 枚举 ====================
 
 def test_dataset_requires_source():
     raw = raw_experiment()
-    raw["trials"][0]["material"] = {"type": "dataset"}
+    raw["trials"][0]["data"] = {"type": "dataset"}
     assert any("source" in e for e in errors_of(raw))
 
 
 def test_dataset_parse_mode_restricted():
     """dataset 走纯结构投影，只认 pre/post；其余会被静默当成 post。"""
     raw = raw_experiment()
-    raw["trials"][0]["material"] = {"type": "dataset", "source": "d.jsonl", "parse": "fixed"}
+    raw["trials"][0]["data"] = {"type": "dataset", "source": "d.jsonl", "parse": "fixed"}
     assert any("只支持" in e for e in errors_of(raw))
 
 
 def test_expr_requires_enumeration_range():
     raw = raw_experiment()
     raw.pop("trial_defaults")        # 去掉基值，单独验证 expr 必填枚举范围（合并后仍缺字段才报错）
-    raw["trials"][0]["material"] = {"type": "expr", "ops": "+-"}
+    raw["trials"][0]["data"] = {"type": "expr", "ops": "+-"}
     errs = errors_of(raw)
     assert any("repeat" in e for e in errs)
 
