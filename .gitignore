@@ -1,0 +1,32 @@
+.idea
+
+# Python 运行产物
+__pycache__/
+*.pyc
+/.codebuddy/*
+
+
+/doc
+/*/doc
+/*/*/doc
+/*/README.md
+/*/*/README.md
+README.md
+
+# abacus 渲染 demo 产物（demos all / demo 逐步帧输出）
+/evaluate/abacus/output/
+/evaluate/abacus/render/output/
+
+
+# 实验：只版本控制「输入(config.yaml) + 结果(report.csv) + 分析脚本」，
+# 数据/词表/权重/日志/图表一律排除（可由 config.yaml 确定性再生）
+
+/model*/data
+/model*/ckpt/
+/model*/README.md
+/model_*/output/
+/*/*/*.pth
+
+/parse/doc/
+
+
