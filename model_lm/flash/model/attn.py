@@ -7,7 +7,6 @@ q,k,v: [B, nh, T, hd]
 mask : [T, T]，上三角为 -inf（当前位置看不到未来）
 返回   : [B, nh, T, hd]
 """
-import torch
 import torch.nn.functional as F
 
 

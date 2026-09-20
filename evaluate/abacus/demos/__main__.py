@@ -7,6 +7,7 @@
     python -m evaluate.abacus.demos fixed      # 逐步灰度 patch   → output/fixed/
     python -m evaluate.abacus.demos minimal    # 逐步极简盘面      → output/minimal/
     python -m evaluate.abacus.demos music      # 运算演奏 + 数字流实验 → output/music/
+    python -m evaluate.abacus.demos vertical   # 竖屏短视频 9:16   → output/vertical/
     python -m evaluate.abacus.demos animate    # 交互式窗口动画    （需 GUI 后端）
     python -m evaluate.abacus.demos all        # 依次跑全部后端
     python -m evaluate.abacus.demos            # 同 all（默认参数）
@@ -28,6 +29,8 @@ _BACKENDS = {
     "fixed": ("evaluate.abacus.render.fixed", "demo", "逐步灰度 patch"),
     "minimal": ("evaluate.abacus.render.minimal", "demo", "逐步极简盘面"),
     "music": ("evaluate.abacus.music", "demo", "运算演奏 + 数字流实验 + 七珠筝旋律 MIDI"),
+    # 竖屏 9:16：7 档 + 拟人时间轴 → 1080×1920 MP4（逐帧出图较慢）
+    "vertical": ("evaluate.abacus.render.vertical", "demo", "竖屏短视频 9:16（7 档 MP4）"),
     "animate": ("evaluate.abacus.render.animation", "demo", "交互式窗口动画"),
 }
 

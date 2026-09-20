@@ -3,7 +3,7 @@
 从 `experiment/domain.py`（原顶层 domain.py）迁出（2026-09-04）：这三个类与实验域（Experiment/Trial/Data）
 无关，`model_vlm` / `model_vm` 原本为了拿它们而被迫 import 整套实验概念。
 
-依赖方向：`domain.py`（实验域）→ `model.config`（模型域）→ 无。
+依赖方向：`domain.py`（实验域）→ `model.domain`（模型域）→ 无。
 模型子系统（model_vlm / model_vm / model_lm）只依赖本模块，不再感知实验。
 
 本模块**不读文件**：配置文件的解析与键名校验统一由 `experiment/config.py` 负责。

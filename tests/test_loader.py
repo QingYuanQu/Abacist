@@ -1,6 +1,6 @@
 """loader —— config.yaml + 磁盘产物 → Experiment 聚合根。
 
-loader 刻意只有 load / init / clone 三个函数：认识"文件格式"的是 schema，
+loader 刻意只有 load / init / clone 三个函数：认识"文件格式"的是 config（experiment/config.py），
 认识"磁盘布局"的才是 loader。这里守住这条边界。
 """
 import os

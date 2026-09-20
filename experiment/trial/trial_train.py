@@ -1,11 +1,11 @@
 import os
 
 import torch
-from model_lm.train import train
+from model_lm.reasoning.train import train
 from model.train_utils import set_seed, load_checkpoint
 
 from model import GPT
-from model_lm.dataset import ArithmeticReasoningDataset
+from model_lm.reasoning.dataset import ArithmeticReasoningDataset
 from functools import partial
 from torch.utils.data import DataLoader
 from torch import optim

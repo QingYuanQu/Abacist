@@ -17,7 +17,7 @@ from matplotlib.patches import Circle, Rectangle
 from matplotlib.animation import FuncAnimation
 
 from evaluate.abacus.domain import Abacus, AbacusState, StateDelta
-from evaluate.abacus.render.style import Style
+from evaluate.abacus.render.style import CJK_FONTS, Style
 from evaluate.abacus.render.geometry import bead_centers, layout_of
 
 
@@ -35,9 +35,8 @@ class AbacusAnimator:
         self.scale = scale
         self._style = self.style
 
-        # 中文字体（与 image.py 同源，避免乱码/方框）
-        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "PingFang SC",
-                                           "Noto Sans CJK SC", "WenQuanYi Micro Hei"]
+        # 中文字体（候选清单见 style.CJK_FONTS，与 image/vertical 同源）
+        plt.rcParams["font.sans-serif"] = list(CJK_FONTS)
         plt.rcParams["axes.unicode_minus"] = False
 
         layout = layout_of(abacus)

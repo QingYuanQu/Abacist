@@ -194,7 +194,7 @@ def main():
     ap.add_argument('expr', nargs='?', help='算式，如 "3+5×2"；缺省进入交互模式')
     ap.add_argument('--model', default=None,
                     help='VLM checkpoint（三任务共用），开启模型看盘说口诀模式')
-    ap.add_argument('--out', default='output/demo', help='GIF 输出目录')
+    ap.add_argument('--out', default='model_vlm/output/', help='GIF 输出目录')
     args = ap.parse_args()
 
     composer, abacus, renderer = make_demo_components()

@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from model.train_utils import save_checkpoint
 from common.record import Record
-from model_lm.eval import compute_accuracy
+from model_lm.reasoning.eval import compute_accuracy
 
 
 def _append_record(log_path, record: Record):

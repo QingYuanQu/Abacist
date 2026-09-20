@@ -4,15 +4,15 @@
 不写 `from model.gpt import ...`，这样内部模块再拆分重组时外部无需改动。
 
 依赖方向单向无环：
-    config / norm / attn_fn / pos_emb ← registry
-    attention ← config, norm, registry
-    block     ← attention, norm, config, registry
-    gpt       ← block, norm, config, registry
+    domain / norm / attn_fn / pos_emb ← registry
+    attention ← domain, norm, registry
+    block     ← attention, norm, domain, registry
+    gpt       ← block, norm, domain, registry
 
 为什么是懒加载（PEP 562）
 ------------------------
 torch 只被 gpt/block/attention 这条装配链需要，**配置层不需要**。若此处顶层
-`from model.gpt import GPT`，则任何 `import model.config`（→ 触发本文件）都会
+`from model.gpt import GPT`，则任何 `import model.domain`（→ 触发本文件）都会
 把 torch 拖进进程。后果不只是慢：torch 会把自带 OpenMP 运行库载入进程，此后
 `matplotlib.savefig` 会直接以 `OMP: Error #15` 中止——于是"读 config.yaml 画张图"
 这种纯配置/分析工作也被迫跟 torch 绑在一起。

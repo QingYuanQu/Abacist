@@ -12,7 +12,13 @@
 - minimal.py：render_minimal 一珠一像素极简盘面（信息论下限的消融
   对照，纯 numpy）——懒加载；
 - registry.py：make_render / default_patch / backend_names 后端注册表——懒加载；
-- geometry.py：bead_centers 共享渲染几何（image/fixed 珠位同源）。
+- geometry.py：bead_centers 共享渲染几何（image/fixed 珠位同源）；
+- hand.py：draw_hand 拨珠小手图元（image/vertical 共用同一手势）——懒加载；
+- style.py：Style 配色 + CJK_FONTS 中文字体候选（零第三方依赖，直接导入）。
+
+⚠️ vertical.py（VerticalRenderer 竖屏 9:16 短视频版式）**不在** registry 后端表内：
+registry 是**机器观测**后端表（产出进训练/推理数据管线），vertical 只给人看，
+注册进去会污染后端选择面。它与 image.py 并列，独立入口调用。
 
 历史：曾以 render/port.py 的 Renderer Protocol 作为渲染抽象（对象式
 `render(state, abacus, view)`），2026-09-07 移除——真实消费方（model_vlm、
@@ -30,10 +36,11 @@ model_vm、evaluate.bridge）全走 registry 函数式接口，Protocol 无生�
 # 勿在此处直接 import（否则 import 本包就会拉起 matplotlib，破坏"VLA 管线零 matplotlib"）。
 from evaluate.abacus.render.text import TextRenderer
 
-__all__ = ["TextRenderer", "ImageRenderer", "Style",
+__all__ = ["TextRenderer", "ImageRenderer", "VerticalRenderer", "Style",
            "render_fixed", "render_minimal"]
 
 _LAZY = {"ImageRenderer": "evaluate.abacus.render.image",
+         "VerticalRenderer": "evaluate.abacus.render.vertical",
          "Style": "evaluate.abacus.render.style",
          "render_fixed": "evaluate.abacus.render.fixed",
          "render_minimal": "evaluate.abacus.render.minimal"}

@@ -25,10 +25,6 @@ import sys
 from functools import partial
 from pathlib import Path
 
-# 项目根加入 sys.path（支持从任意目录运行 / 直接 python model_vlm/train.py）
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 import torch
 from torch import nn
@@ -39,10 +35,18 @@ from model.domain import BrainConfig, ModelConfig, PosEmbConfig
 from model import GPT
 from model.vision import VisionEncoder
 from model_vlm.dataset import VLMDataset, vlm_collate
-from model.vocab import PAD_TOKEN, STOP_TOKEN, Vocab, build_vocab_from_files
+from model.vocab import PAD_TOKEN, STOP_TOKEN, Vocab, build_vocab_from_files  # noqa: E402
 from evaluate.abacus.render.registry import (
-    DEFAULT_RENDER, backend_names, resolve_patch,
+    DEFAULT_RENDER,
+    backend_names,
+    resolve_patch,
+    default_patch,
 )
+
+# 项目根加入 sys.path（支持从任意目录运行 / 直接 python model_vlm/train.py）
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 
 _VLM_TOKENS = [

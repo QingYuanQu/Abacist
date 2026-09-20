@@ -7,7 +7,8 @@
   - 透明背景 + tight_layout（无外框）
 
 机器观测渲染（render_fixed，纯 numpy）已迁至 fixed.py；
-共享珠位几何在 geometry.py，两种输出的珠位完全同源。
+共享珠位几何在 geometry.py，两种输出的珠位完全同源；
+拨珠小手图元在 hand.py（与竖屏版式 vertical.py 共用同一手势）。
 
 示例入口：python -m evaluate.abacus.demos image → 输出到 abacus/output/image/。
 """
@@ -18,7 +19,8 @@ from matplotlib.patches import Circle, Rectangle
 
 from evaluate.abacus.domain import Abacus, AbacusState, StateDelta
 from evaluate.abacus.render.geometry import bead_centers, layout_of
-from evaluate.abacus.render.style import Style
+from evaluate.abacus.render.hand import draw_hand
+from evaluate.abacus.render.style import CJK_FONTS, Style
 
 
 class ImageRenderer:
@@ -76,9 +78,8 @@ class ImageRenderer:
         # 珠位（靠梁贴梁 / 离梁贴框，真实位移）
         centers = bead_centers(state, abacus)
 
-        # 中文字体（缺省回退，避免乱码/方框）
-        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "PingFang SC",
-                                           "Noto Sans CJK SC", "WenQuanYi Micro Hei"]
+        # 中文字体（缺省回退，避免乱码/方框；候选清单见 style.CJK_FONTS）
+        plt.rcParams["font.sans-serif"] = list(CJK_FONTS)
         plt.rcParams["axes.unicode_minus"] = False
 
         # figsize：按档数自适应（对齐原版 max(3.0, n_cols*1.2) × 3.5）
@@ -186,19 +187,11 @@ class ImageRenderer:
         return img
 
     def _draw_hand(self, ax, x: float, y: float) -> None:
-        """在珠位 (x, y) 旁画一只简笔小手：掌心圆 + 三根短指，从右侧伸入捏珠。"""
-        skin = "#F1C27D"
-        outline = "#C07A3A"
-        # 掌心（位于珠右侧）
-        ax.add_patch(Circle((x + 0.55, y), 0.28, facecolor=skin,
-                            edgecolor=outline, linewidth=1.0, zorder=7))
-        # 三根手指（朝左捏向珠）
-        for dy in (-0.14, 0.0, 0.14):
-            ax.plot([x + 0.42, x + 0.18], [y + dy, y + dy],
-                    color=skin, linewidth=3.0, solid_capstyle="round", zorder=7)
-        # 腕部（向右延伸）
-        ax.plot([x + 0.72, x + 0.95], [y, y], color=skin, linewidth=4.0,
-                solid_capstyle="round", zorder=7)
+        """在珠位 (x, y) 旁画一只简笔小手：掌心圆 + 三根短指，从右侧伸入捏珠。
+
+        图元与绘制见 render/hand.py（竖屏版式 vertical.py 共用同一手势）；
+        此处 lw_scale=1.0，绘制结果与抽离前逐像素一致。"""
+        draw_hand(ax, x, y)
 
     def describe(self, state: AbacusState) -> dict:
         return {"step": state.step_index,

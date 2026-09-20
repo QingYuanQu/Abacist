@@ -5,7 +5,7 @@
   - 训练记录（Record / RECORD_FIELDS）→ `common/record.py`（跨 model_* 后端与 experiment 的共享契约：各后端生产、experiment 消费）
 本模块只放实验域的静态配置与聚合根，不再被模型子系统依赖。
 
-依赖方向（单向无环）：experiment.config → model.config / common.record。
+依赖方向（单向无环）：experiment.domain → model.domain / common.record。
 
 本模块是**纯数据定义**：不读文件，也不认识任何 CSV / YAML / JSON 的键名。
     - 文件格式的解析与校验 → `experiment/config.py`（唯一读 config.yaml 的地方）

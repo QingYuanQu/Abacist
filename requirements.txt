@@ -13,6 +13,9 @@ Pillow
 matplotlib
 imageio
 
+# ---- 视频导出（render/vertical.py 的 save_mp4 → H.264；只出 GIF/PNG 则不需要）----
+imageio-ffmpeg
+
 # ---- 工具 / 测试 ----
 scipy
 openpyxl
