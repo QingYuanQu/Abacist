@@ -28,7 +28,7 @@ train:
   dropout: 0.0
   train_seed: 42
 eval:
-  eval_batch_size: 1024
+  eval_batch_size: 2218
   print_interval: 1000
   acc_mode: acc
   pass_threshold: 0.95
@@ -48,9 +48,9 @@ trial_defaults:
     abacus_style: song
     source: parse/dataset/dataset_C.jsonl
   method:
-    epochs: 100
-    repeat_factor: 1
-    batch_size: 64
+    epochs: 30
+    repeat_factor: 2
+    batch_size: 128
     learning_rate: 0.001
     shuffle: true
 trials:
